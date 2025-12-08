@@ -8,8 +8,14 @@ import { z } from 'zod';
  */
 const contactFormSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100, 'Name is too long'),
-  email: z.string().email('Invalid email address').max(255, 'Email is too long'),
-  message: z.string().min(10, 'Message must be at least 10 characters').max(2000, 'Message is too long'),
+  email: z
+    .string()
+    .email('Invalid email address')
+    .max(255, 'Email is too long'),
+  message: z
+    .string()
+    .min(10, 'Message must be at least 10 characters')
+    .max(2000, 'Message is too long'),
 });
 
 /**
@@ -21,7 +27,11 @@ export async function submitContactForm(req, res, next) {
     const { name, email, message } = req.body;
 
     // Validate input
-    const validationResult = contactFormSchema.safeParse({ name, email, message });
+    const validationResult = contactFormSchema.safeParse({
+      name,
+      email,
+      message,
+    });
 
     if (!validationResult.success) {
       const firstError = validationResult.error.errors[0];
@@ -49,10 +59,15 @@ export async function submitContactForm(req, res, next) {
     // await sendContactEmail(validatedData);
     // await storeContactSubmission(validatedData);
 
-    return sendSuccess(res, {
-      message: 'Thank you for contacting us! We\'ll get back to you within 24 hours.',
-      submitted: true,
-    }, 'Contact form submitted successfully');
+    return sendSuccess(
+      res,
+      {
+        message:
+          "Thank you for contacting us! We'll get back to you within 24 hours.",
+        submitted: true,
+      },
+      'Contact form submitted successfully',
+    );
   } catch (error) {
     logger.error('Contact form submission error', {
       error: error.message,
@@ -65,4 +80,3 @@ export async function submitContactForm(req, res, next) {
 export default {
   submitContactForm,
 };
-

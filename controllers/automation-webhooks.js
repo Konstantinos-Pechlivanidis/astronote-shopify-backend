@@ -41,7 +41,8 @@ export async function handleOrderCreated(req, res, _next) {
       });
 
       // Extract phone number from customer data
-      const phoneE164 = customer.phone || customer.default_address?.phone || null;
+      const phoneE164 =
+        customer.phone || customer.default_address?.phone || null;
 
       contact = await prisma.contact.create({
         data: {
@@ -74,7 +75,8 @@ export async function handleOrderCreated(req, res, _next) {
           orderData: {
             orderNumber: id.toString(),
             customerEmail: customer.email,
-            customerName: `${customer.first_name || ''} ${customer.last_name || ''}`.trim(),
+            customerName:
+              `${customer.first_name || ''} ${customer.last_name || ''}`.trim(),
             lineItems: line_items,
             totalPrice: req.body.total_price,
             currency: req.body.currency,
@@ -97,7 +99,11 @@ export async function handleOrderCreated(req, res, _next) {
       });
 
       // Return success immediately - job will be processed asynchronously
-      return sendSuccess(res, { automationQueued: true }, 'Order webhook processed');
+      return sendSuccess(
+        res,
+        { automationQueued: true },
+        'Order webhook processed',
+      );
     } catch (queueError) {
       logger.error('Failed to queue order confirmation automation', {
         shopId: shop.id,
@@ -107,7 +113,11 @@ export async function handleOrderCreated(req, res, _next) {
       });
       // Still return success to Shopify to prevent retries
       // The error is logged and can be handled separately
-      return sendSuccess(res, { automationQueued: false, error: 'Queue failed' }, 'Order webhook processed');
+      return sendSuccess(
+        res,
+        { automationQueued: false, error: 'Queue failed' },
+        'Order webhook processed',
+      );
     }
   } catch (error) {
     logger.error('Order webhook processing failed', {
@@ -165,7 +175,8 @@ export async function handleCartAbandoned(req, res, _next) {
           cartData: {
             cartToken: cart_token,
             customerEmail: customer.email,
-            customerName: `${customer.first_name || ''} ${customer.last_name || ''}`.trim(),
+            customerName:
+              `${customer.first_name || ''} ${customer.last_name || ''}`.trim(),
             lineItems: line_items,
             abandonedAt: new Date().toISOString(),
           },
@@ -186,7 +197,11 @@ export async function handleCartAbandoned(req, res, _next) {
         cartToken: cart_token,
       });
 
-      return sendSuccess(res, { automationQueued: true }, 'Cart webhook processed');
+      return sendSuccess(
+        res,
+        { automationQueued: true },
+        'Cart webhook processed',
+      );
     } catch (queueError) {
       logger.error('Failed to queue abandoned cart automation', {
         shopId: shop.id,
@@ -194,7 +209,11 @@ export async function handleCartAbandoned(req, res, _next) {
         cartToken: cart_token,
         error: queueError.message,
       });
-      return sendSuccess(res, { automationQueued: false, error: 'Queue failed' }, 'Cart webhook processed');
+      return sendSuccess(
+        res,
+        { automationQueued: false, error: 'Queue failed' },
+        'Cart webhook processed',
+      );
     }
   } catch (error) {
     logger.error('Cart webhook processing failed', {
@@ -213,7 +232,9 @@ export async function triggerAutomationManually(req, res, _next) {
     const { shopId, contactId, triggerEvent, additionalData = {} } = req.body;
 
     if (!shopId || !contactId || !triggerEvent) {
-      throw new ValidationError('shopId, contactId, and triggerEvent are required');
+      throw new ValidationError(
+        'shopId, contactId, and triggerEvent are required',
+      );
     }
 
     // Import the automation service
@@ -259,7 +280,14 @@ export async function triggerAutomationManually(req, res, _next) {
  */
 export async function handleOrderFulfilled(req, res, _next) {
   try {
-    const { shop_domain, id, customer, fulfillment_status, tracking_number, tracking_urls } = req.body;
+    const {
+      shop_domain,
+      id,
+      customer,
+      fulfillment_status,
+      tracking_number,
+      tracking_urls,
+    } = req.body;
 
     if (!shop_domain || !id || !customer) {
       throw new ValidationError('shop_domain, id, and customer are required');
@@ -271,7 +299,9 @@ export async function handleOrderFulfilled(req, res, _next) {
     });
 
     if (!shop) {
-      logger.warn('Shop not found for order fulfillment webhook', { shop_domain });
+      logger.warn('Shop not found for order fulfillment webhook', {
+        shop_domain,
+      });
       throw new NotFoundError('Shop');
     }
 
@@ -290,7 +320,8 @@ export async function handleOrderFulfilled(req, res, _next) {
         customerEmail: customer.email,
       });
 
-      const phoneE164 = customer.phone || customer.default_address?.phone || null;
+      const phoneE164 =
+        customer.phone || customer.default_address?.phone || null;
 
       contact = await prisma.contact.create({
         data: {
@@ -322,7 +353,8 @@ export async function handleOrderFulfilled(req, res, _next) {
           orderData: {
             orderNumber: id.toString(),
             customerEmail: customer.email,
-            customerName: `${customer.first_name || ''} ${customer.last_name || ''}`.trim(),
+            customerName:
+              `${customer.first_name || ''} ${customer.last_name || ''}`.trim(),
             fulfillmentStatus: fulfillment_status,
             trackingNumber: tracking_number,
             trackingUrls: tracking_urls || [],
@@ -344,7 +376,11 @@ export async function handleOrderFulfilled(req, res, _next) {
         orderId: id,
       });
 
-      return sendSuccess(res, { automationQueued: true }, 'Order fulfillment webhook processed');
+      return sendSuccess(
+        res,
+        { automationQueued: true },
+        'Order fulfillment webhook processed',
+      );
     } catch (queueError) {
       logger.error('Failed to queue order fulfillment automation', {
         shopId: shop.id,
@@ -352,7 +388,11 @@ export async function handleOrderFulfilled(req, res, _next) {
         orderId: id,
         error: queueError.message,
       });
-      return sendSuccess(res, { automationQueued: false, error: 'Queue failed' }, 'Order fulfillment webhook processed');
+      return sendSuccess(
+        res,
+        { automationQueued: false, error: 'Queue failed' },
+        'Order fulfillment webhook processed',
+      );
     }
   } catch (error) {
     logger.error('Order fulfillment webhook processing failed', {

@@ -1,6 +1,10 @@
 import prisma from './prisma.js';
 import { logger } from '../utils/logger.js';
-import { ValidationError, NotFoundError, ConflictError } from '../utils/errors.js';
+import {
+  ValidationError,
+  NotFoundError,
+  ConflictError,
+} from '../utils/errors.js';
 import { automationQueue } from '../queue/index.js';
 import { hasActiveAutomation } from './automations.js';
 
@@ -160,7 +164,13 @@ export async function listContacts(storeId, filters = {}) {
   }
 
   // Validate sort parameters
-  const validSortFields = ['createdAt', 'updatedAt', 'firstName', 'lastName', 'birthDate'];
+  const validSortFields = [
+    'createdAt',
+    'updatedAt',
+    'firstName',
+    'lastName',
+    'birthDate',
+  ];
   const sortField = validSortFields.includes(sortBy) ? sortBy : 'createdAt';
   const sortDirection = sortOrder === 'asc' ? 'asc' : 'desc';
 
@@ -255,22 +265,36 @@ export async function createContact(storeId, contactData) {
 
   // Validate phone format
   if (!isValidPhoneE164(phoneE164)) {
-    throw new ValidationError('Invalid phone number format. Use E.164 format (e.g., +306977123456)');
+    throw new ValidationError(
+      'Invalid phone number format. Use E.164 format (e.g., +306977123456)',
+    );
   }
 
   // Validate email if provided
-  if (contactData.email && contactData.email.trim() && !isValidEmail(contactData.email.trim())) {
+  if (
+    contactData.email &&
+    contactData.email.trim() &&
+    !isValidEmail(contactData.email.trim())
+  ) {
     throw new ValidationError('Invalid email format');
   }
 
   // Validate gender if provided
-  if (contactData.gender && !['male', 'female', 'other'].includes(contactData.gender)) {
+  if (
+    contactData.gender &&
+    !['male', 'female', 'other'].includes(contactData.gender)
+  ) {
     throw new ValidationError('Gender must be one of: male, female, other');
   }
 
   // Validate SMS consent
-  if (contactData.smsConsent && !['opted_in', 'opted_out', 'unknown'].includes(contactData.smsConsent)) {
-    throw new ValidationError('SMS consent must be one of: opted_in, opted_out, unknown');
+  if (
+    contactData.smsConsent &&
+    !['opted_in', 'opted_out', 'unknown'].includes(contactData.smsConsent)
+  ) {
+    throw new ValidationError(
+      'SMS consent must be one of: opted_in, opted_out, unknown',
+    );
   }
 
   // Check for duplicates
@@ -290,9 +314,18 @@ export async function createContact(storeId, contactData) {
   const prismaData = {
     shopId: storeId,
     phoneE164,
-    firstName: contactData.firstName && contactData.firstName.trim() ? contactData.firstName.trim() : null,
-    lastName: contactData.lastName && contactData.lastName.trim() ? contactData.lastName.trim() : null,
-    email: contactData.email && contactData.email.trim() ? contactData.email.trim() : null,
+    firstName:
+      contactData.firstName && contactData.firstName.trim()
+        ? contactData.firstName.trim()
+        : null,
+    lastName:
+      contactData.lastName && contactData.lastName.trim()
+        ? contactData.lastName.trim()
+        : null,
+    email:
+      contactData.email && contactData.email.trim()
+        ? contactData.email.trim()
+        : null,
     gender: contactData.gender || null,
     smsConsent: contactData.smsConsent || 'unknown',
     tags: contactData.tags || [],
@@ -300,7 +333,10 @@ export async function createContact(storeId, contactData) {
 
   // Handle birthDate conversion
   if (contactData.birthDate) {
-    if (typeof contactData.birthDate === 'string' && contactData.birthDate.trim()) {
+    if (
+      typeof contactData.birthDate === 'string' &&
+      contactData.birthDate.trim()
+    ) {
       const birthDate = new Date(contactData.birthDate);
       if (!isNaN(birthDate.getTime())) {
         // Validate birth date is not in the future
@@ -337,12 +373,18 @@ export async function createContact(storeId, contactData) {
     data: prismaData,
   });
 
-  logger.info('Contact created successfully', { storeId, contactId: contact.id });
+  logger.info('Contact created successfully', {
+    storeId,
+    contactId: contact.id,
+  });
 
   // Trigger welcome automation if contact has opted in and welcome automation is active
   if (contact.smsConsent === 'opted_in') {
     try {
-      const hasWelcomeAutomation = await hasActiveAutomation(storeId, 'welcome');
+      const hasWelcomeAutomation = await hasActiveAutomation(
+        storeId,
+        'welcome',
+      );
 
       if (hasWelcomeAutomation) {
         logger.info('Queueing welcome automation for new contact', {
@@ -394,11 +436,14 @@ export async function createContact(storeId, contactData) {
       });
     }
   } else {
-    logger.debug('Contact does not have SMS consent, skipping welcome automation', {
-      storeId,
-      contactId: contact.id,
-      smsConsent: contact.smsConsent,
-    });
+    logger.debug(
+      'Contact does not have SMS consent, skipping welcome automation',
+      {
+        storeId,
+        contactId: contact.id,
+        smsConsent: contact.smsConsent,
+      },
+    );
   }
 
   return contact;
@@ -430,13 +475,22 @@ export async function updateContact(storeId, contactId, contactData) {
   if (contactData.phoneE164) {
     const phoneE164 = normalizePhone(contactData.phoneE164);
     if (!isValidPhoneE164(phoneE164)) {
-      throw new ValidationError('Invalid phone number format. Use E.164 format (e.g., +306977123456)');
+      throw new ValidationError(
+        'Invalid phone number format. Use E.164 format (e.g., +306977123456)',
+      );
     }
 
     // Check for duplicates
-    const { hasDuplicate } = await checkDuplicates(storeId, phoneE164, null, contactId);
+    const { hasDuplicate } = await checkDuplicates(
+      storeId,
+      phoneE164,
+      null,
+      contactId,
+    );
     if (hasDuplicate) {
-      throw new ConflictError(`Contact already exists with phone: ${phoneE164}`);
+      throw new ConflictError(
+        `Contact already exists with phone: ${phoneE164}`,
+      );
     }
 
     updateData.phoneE164 = phoneE164;
@@ -444,15 +498,25 @@ export async function updateContact(storeId, contactId, contactData) {
 
   // Validate and update email if provided
   if (contactData.email !== undefined) {
-    const emailValue = contactData.email && contactData.email.trim() ? contactData.email.trim() : null;
+    const emailValue =
+      contactData.email && contactData.email.trim()
+        ? contactData.email.trim()
+        : null;
     if (emailValue && !isValidEmail(emailValue)) {
       throw new ValidationError('Invalid email format');
     }
 
     if (emailValue) {
-      const { hasDuplicate } = await checkDuplicates(storeId, null, emailValue, contactId);
+      const { hasDuplicate } = await checkDuplicates(
+        storeId,
+        null,
+        emailValue,
+        contactId,
+      );
       if (hasDuplicate) {
-        throw new ConflictError(`Contact already exists with email: ${emailValue}`);
+        throw new ConflictError(
+          `Contact already exists with email: ${emailValue}`,
+        );
       }
     }
 
@@ -461,7 +525,10 @@ export async function updateContact(storeId, contactId, contactData) {
 
   // Validate gender if provided
   if (contactData.gender !== undefined) {
-    if (contactData.gender && !['male', 'female', 'other'].includes(contactData.gender)) {
+    if (
+      contactData.gender &&
+      !['male', 'female', 'other'].includes(contactData.gender)
+    ) {
       throw new ValidationError('Gender must be one of: male, female, other');
     }
     updateData.gender = contactData.gender;
@@ -469,21 +536,35 @@ export async function updateContact(storeId, contactId, contactData) {
 
   // Validate SMS consent if provided
   if (contactData.smsConsent !== undefined) {
-    if (!['opted_in', 'opted_out', 'unknown'].includes(contactData.smsConsent)) {
-      throw new ValidationError('SMS consent must be one of: opted_in, opted_out, unknown');
+    if (
+      !['opted_in', 'opted_out', 'unknown'].includes(contactData.smsConsent)
+    ) {
+      throw new ValidationError(
+        'SMS consent must be one of: opted_in, opted_out, unknown',
+      );
     }
     updateData.smsConsent = contactData.smsConsent;
   }
 
   // Update other fields
   if (contactData.firstName !== undefined) {
-    updateData.firstName = contactData.firstName && contactData.firstName.trim() ? contactData.firstName.trim() : null;
+    updateData.firstName =
+      contactData.firstName && contactData.firstName.trim()
+        ? contactData.firstName.trim()
+        : null;
   }
   if (contactData.lastName !== undefined) {
-    updateData.lastName = contactData.lastName && contactData.lastName.trim() ? contactData.lastName.trim() : null;
+    updateData.lastName =
+      contactData.lastName && contactData.lastName.trim()
+        ? contactData.lastName.trim()
+        : null;
   }
   if (contactData.birthDate !== undefined) {
-    if (contactData.birthDate && typeof contactData.birthDate === 'string' && contactData.birthDate.trim()) {
+    if (
+      contactData.birthDate &&
+      typeof contactData.birthDate === 'string' &&
+      contactData.birthDate.trim()
+    ) {
       const birthDate = new Date(contactData.birthDate);
       if (isNaN(birthDate.getTime())) {
         throw new ValidationError('Invalid birth date format');
@@ -500,9 +581,10 @@ export async function updateContact(storeId, contactId, contactData) {
       updateData.birthDate = null;
     } else {
       // Try to parse as Date object if it's already a Date
-      const birthDate = contactData.birthDate instanceof Date
-        ? contactData.birthDate
-        : new Date(contactData.birthDate);
+      const birthDate =
+        contactData.birthDate instanceof Date
+          ? contactData.birthDate
+          : new Date(contactData.birthDate);
       if (isNaN(birthDate.getTime())) {
         throw new ValidationError('Invalid birth date format');
       }
@@ -641,9 +723,15 @@ export async function getContactStats(storeId) {
       unknown: total - genderStats.reduce((sum, s) => sum + s._count.gender, 0),
     },
     byConsent: {
-      opted_in: consentStats.find(s => s.smsConsent === 'opted_in')?._count?.smsConsent || 0,
-      opted_out: consentStats.find(s => s.smsConsent === 'opted_out')?._count?.smsConsent || 0,
-      unknown: consentStats.find(s => s.smsConsent === 'unknown')?._count?.smsConsent || 0,
+      opted_in:
+        consentStats.find(s => s.smsConsent === 'opted_in')?._count
+          ?.smsConsent || 0,
+      opted_out:
+        consentStats.find(s => s.smsConsent === 'opted_out')?._count
+          ?.smsConsent || 0,
+      unknown:
+        consentStats.find(s => s.smsConsent === 'unknown')?._count
+          ?.smsConsent || 0,
     },
     withBirthday,
   };
@@ -753,7 +841,9 @@ export async function importContacts(storeId, contactsData) {
             lastName: contactData.lastName || existing.lastName,
             email: contactData.email || existing.email,
             gender: contactData.gender || existing.gender,
-            birthDate: contactData.birthDate ? new Date(contactData.birthDate) : existing.birthDate,
+            birthDate: contactData.birthDate
+              ? new Date(contactData.birthDate)
+              : existing.birthDate,
             smsConsent: contactData.smsConsent || existing.smsConsent,
             tags: contactData.tags || existing.tags,
           },
@@ -769,7 +859,9 @@ export async function importContacts(storeId, contactsData) {
             lastName: contactData.lastName || null,
             email: contactData.email || null,
             gender: contactData.gender || null,
-            birthDate: contactData.birthDate ? new Date(contactData.birthDate) : null,
+            birthDate: contactData.birthDate
+              ? new Date(contactData.birthDate)
+              : null,
             smsConsent: contactData.smsConsent || 'unknown',
             tags: contactData.tags || [],
           },
@@ -790,11 +882,7 @@ export async function importContacts(storeId, contactsData) {
   return results;
 }
 
-export {
-  normalizePhone,
-  isValidPhoneE164,
-  isValidEmail,
-};
+export { normalizePhone, isValidPhoneE164, isValidEmail };
 
 export default {
   listContacts,
@@ -809,4 +897,3 @@ export default {
   isValidPhoneE164,
   isValidEmail,
 };
-

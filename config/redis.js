@@ -37,7 +37,7 @@ const createRedisClient = async () => {
   });
 
   // Error handling
-  client.on('error', (err) => {
+  client.on('error', err => {
     logger.error('Redis Client Error', { error: err.message });
   });
 
@@ -79,7 +79,8 @@ const createRedisClient = async () => {
 };
 
 // Skip Redis in test mode for faster tests
-const skipRedis = process.env.NODE_ENV === 'test' && process.env.SKIP_REDIS === 'true';
+const skipRedis =
+  process.env.NODE_ENV === 'test' && process.env.SKIP_REDIS === 'true';
 
 // Mock Redis class for tests
 class MockRedis {
@@ -154,17 +155,19 @@ export const queueRedis = skipRedis
     password: process.env.REDIS_PASSWORD,
     // TLS configuration for Redis Cloud
     // Note: For Redis Cloud, TLS is required and should be configured properly
-    ...(process.env.REDIS_TLS === 'true' ? {
-      tls: {
-        rejectUnauthorized: false, // Redis Cloud uses self-signed certificates
-        servername: process.env.REDIS_HOST || 'localhost', // Required for TLS SNI
-      },
-    } : {}),
+    ...(process.env.REDIS_TLS === 'true'
+      ? {
+        tls: {
+          rejectUnauthorized: false, // Redis Cloud uses self-signed certificates
+          servername: process.env.REDIS_HOST || 'localhost', // Required for TLS SNI
+        },
+      }
+      : {}),
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
     lazyConnect: true,
     connectTimeout: 10000,
-    retryStrategy: (times) => {
+    retryStrategy: times => {
       if (times > 3) {
         return null;
       }
@@ -303,7 +306,7 @@ export const sessionRedis = skipRedis
   };
 
 // Health check function
-export const checkRedisHealth = async (redis) => {
+export const checkRedisHealth = async redis => {
   try {
     const start = Date.now();
     let result;
@@ -343,11 +346,17 @@ export const closeRedisConnections = async () => {
       promises.push(queueRedis.quit());
     }
 
-    if (cacheRedisInstance && typeof cacheRedisInstance.disconnect === 'function') {
+    if (
+      cacheRedisInstance &&
+      typeof cacheRedisInstance.disconnect === 'function'
+    ) {
       promises.push(cacheRedisInstance.disconnect());
     }
 
-    if (sessionRedisInstance && typeof sessionRedisInstance.disconnect === 'function') {
+    if (
+      sessionRedisInstance &&
+      typeof sessionRedisInstance.disconnect === 'function'
+    ) {
       promises.push(sessionRedisInstance.disconnect());
     }
 

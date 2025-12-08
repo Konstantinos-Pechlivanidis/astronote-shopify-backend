@@ -1,6 +1,12 @@
 import { getStoreId } from '../middlewares/store-resolution.js';
 import { logger } from '../utils/logger.js';
-import { getKPIs, getCampaignPerformance, getAutomationInsights, getCreditUsage, getContactInsights } from '../services/reports.js';
+import {
+  getKPIs,
+  getCampaignPerformance,
+  getAutomationInsights,
+  getCreditUsage,
+  getContactInsights,
+} from '../services/reports.js';
 import prisma from '../services/prisma.js';
 import { sendSuccess } from '../utils/response.js';
 import { NotFoundError } from '../utils/errors.js';
@@ -16,10 +22,16 @@ export async function overview(req, res, next) {
     const kpis = await getKPIs(storeId);
 
     // Get campaign performance
-    const campaignPerformance = await getCampaignPerformance(storeId, { from, to });
+    const campaignPerformance = await getCampaignPerformance(storeId, {
+      from,
+      to,
+    });
 
     // Get automation insights
-    const automationInsights = await getAutomationInsights(storeId, { from, to });
+    const automationInsights = await getAutomationInsights(storeId, {
+      from,
+      to,
+    });
 
     // Get credit usage
     const creditUsage = await getCreditUsage(storeId, { from, to });
@@ -42,7 +54,8 @@ export async function overview(req, res, next) {
       recentActivity: kpis.recentActivity,
       health: kpis.health,
       dateRange: {
-        from: from || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+        from:
+          from || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
         to: to || new Date().toISOString(),
         window: '30d',
       },
@@ -66,19 +79,38 @@ export async function campaigns(req, res, next) {
     const storeId = getStoreId(req);
     const { from, to, status, type, page = 1, limit = 20 } = req.query;
 
-    logger.info('Campaign reports requested', { storeId, from, to, status, type });
+    logger.info('Campaign reports requested', {
+      storeId,
+      from,
+      to,
+      status,
+      type,
+    });
 
     // Get campaign performance data
-    const campaignPerformance = await getCampaignPerformance(storeId, { from, to, status, type });
+    const campaignPerformance = await getCampaignPerformance(storeId, {
+      from,
+      to,
+      status,
+      type,
+    });
 
     // Get paginated campaigns list
     // Validate status using same logic as campaigns service
-    const validStatuses = ['draft', 'scheduled', 'sending', 'sent', 'failed', 'cancelled'];
+    const validStatuses = [
+      'draft',
+      'scheduled',
+      'sending',
+      'sent',
+      'failed',
+      'cancelled',
+    ];
     const offset = (parseInt(page) - 1) * parseInt(limit);
     const campaigns = await prisma.campaign.findMany({
       where: {
         shopId: storeId,
-        ...(from && to && {
+        ...(from &&
+          to && {
           createdAt: {
             gte: new Date(from),
             lte: new Date(to),
@@ -110,7 +142,8 @@ export async function campaigns(req, res, next) {
     const totalCount = await prisma.campaign.count({
       where: {
         shopId: storeId,
-        ...(from && to && {
+        ...(from &&
+          to && {
           createdAt: {
             gte: new Date(from),
             lte: new Date(to),
@@ -134,14 +167,26 @@ export async function campaigns(req, res, next) {
       })),
       totalCount,
       campaignStats: {
-        totalSent: campaignPerformance.summary.totalSent || campaignPerformance.summary.totalMessages || 0,
-        totalDelivered: campaignPerformance.summary.totalDelivered || campaignPerformance.summary.delivered || 0,
-        totalFailed: campaignPerformance.summary.totalFailed || campaignPerformance.summary.failed || 0,
+        totalSent:
+          campaignPerformance.summary.totalSent ||
+          campaignPerformance.summary.totalMessages ||
+          0,
+        totalDelivered:
+          campaignPerformance.summary.totalDelivered ||
+          campaignPerformance.summary.delivered ||
+          0,
+        totalFailed:
+          campaignPerformance.summary.totalFailed ||
+          campaignPerformance.summary.failed ||
+          0,
         avgDeliveryRate: campaignPerformance.summary.deliveryRate || 0,
-        byStatus: campaignPerformance.campaignStats?.byStatus || campaignPerformance.statusBreakdown?.reduce((acc, item) => {
-          acc[item.status] = item.count;
-          return acc;
-        }, {}) || {},
+        byStatus:
+          campaignPerformance.campaignStats?.byStatus ||
+          campaignPerformance.statusBreakdown?.reduce((acc, item) => {
+            acc[item.status] = item.count;
+            return acc;
+          }, {}) ||
+          {},
       },
       topPerformers: campaignPerformance.topPerformers,
       trends: campaignPerformance.trends,
@@ -155,7 +200,8 @@ export async function campaigns(req, res, next) {
         hasPrevPage: parseInt(page) > 1,
       },
       dateRange: {
-        from: from || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+        from:
+          from || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
         to: to || new Date().toISOString(),
       },
     });
@@ -204,9 +250,12 @@ export async function campaignById(req, res, next) {
       _count: { status: true },
     });
 
-    const sent = messageStats.find(s => s.status === 'sent')?._count?.status || 0;
-    const delivered = messageStats.find(s => s.status === 'delivered')?._count?.status || 0;
-    const failed = messageStats.find(s => s.status === 'failed')?._count?.status || 0;
+    const sent =
+      messageStats.find(s => s.status === 'sent')?._count?.status || 0;
+    const delivered =
+      messageStats.find(s => s.status === 'delivered')?._count?.status || 0;
+    const failed =
+      messageStats.find(s => s.status === 'failed')?._count?.status || 0;
     const deliveryRate = sent > 0 ? (delivered / sent) * 100 : 0;
 
     // Get recipient analytics
@@ -221,9 +270,16 @@ export async function campaignById(req, res, next) {
       _count: { smsConsent: true },
     });
 
-    const totalRecipients = recipientStats.reduce((sum, stat) => sum + stat._count.smsConsent, 0);
-    const optedIn = recipientStats.find(s => s.smsConsent === 'opted_in')?._count?.smsConsent || 0;
-    const optedOut = recipientStats.find(s => s.smsConsent === 'opted_out')?._count?.smsConsent || 0;
+    const totalRecipients = recipientStats.reduce(
+      (sum, stat) => sum + stat._count.smsConsent,
+      0,
+    );
+    const optedIn =
+      recipientStats.find(s => s.smsConsent === 'opted_in')?._count
+        ?.smsConsent || 0;
+    const optedOut =
+      recipientStats.find(s => s.smsConsent === 'opted_out')?._count
+        ?.smsConsent || 0;
 
     // Get daily trends
     const dailyTrends = await prisma.messageLog.groupBy({
@@ -274,7 +330,10 @@ export async function automations(req, res, next) {
     logger.info('Automation reports requested', { storeId, from, to });
 
     // Get automation insights
-    const automationInsights = await getAutomationInsights(storeId, { from, to });
+    const automationInsights = await getAutomationInsights(storeId, {
+      from,
+      to,
+    });
 
     return sendSuccess(res, {
       summary: automationInsights.summary,
@@ -283,7 +342,8 @@ export async function automations(req, res, next) {
       trends: automationInsights.trends,
       activeAutomations: automationInsights.activeAutomations,
       dateRange: {
-        from: from || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+        from:
+          from || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
         to: to || new Date().toISOString(),
       },
     });
@@ -313,7 +373,8 @@ export async function messaging(req, res, next) {
       by: ['direction'],
       where: {
         shopId: storeId,
-        ...(from && to && {
+        ...(from &&
+          to && {
           createdAt: {
             gte: new Date(from),
             lte: new Date(to),
@@ -328,7 +389,8 @@ export async function messaging(req, res, next) {
       by: ['status'],
       where: {
         shopId: storeId,
-        ...(from && to && {
+        ...(from &&
+          to && {
           createdAt: {
             gte: new Date(from),
             lte: new Date(to),
@@ -343,7 +405,8 @@ export async function messaging(req, res, next) {
       by: ['createdAt'],
       where: {
         shopId: storeId,
-        ...(from && to && {
+        ...(from &&
+          to && {
           createdAt: {
             gte: new Date(from),
             lte: new Date(to),
@@ -354,13 +417,23 @@ export async function messaging(req, res, next) {
       orderBy: { createdAt: 'asc' },
     });
 
-    const totalMessages = directionStats.reduce((sum, stat) => sum + stat._count.direction, 0);
-    const inbound = directionStats.find(s => s.direction === 'inbound')?._count?.direction || 0;
-    const outbound = directionStats.find(s => s.direction === 'outbound')?._count?.direction || 0;
+    const totalMessages = directionStats.reduce(
+      (sum, stat) => sum + stat._count.direction,
+      0,
+    );
+    const inbound =
+      directionStats.find(s => s.direction === 'inbound')?._count?.direction ||
+      0;
+    const outbound =
+      directionStats.find(s => s.direction === 'outbound')?._count?.direction ||
+      0;
 
-    const sent = statusStats.find(s => s.status === 'sent')?._count?.status || 0;
-    const delivered = statusStats.find(s => s.status === 'delivered')?._count?.status || 0;
-    const failed = statusStats.find(s => s.status === 'failed')?._count?.status || 0;
+    const sent =
+      statusStats.find(s => s.status === 'sent')?._count?.status || 0;
+    const delivered =
+      statusStats.find(s => s.status === 'delivered')?._count?.status || 0;
+    const failed =
+      statusStats.find(s => s.status === 'failed')?._count?.status || 0;
 
     return sendSuccess(res, {
       totalMessages,
@@ -371,7 +444,8 @@ export async function messaging(req, res, next) {
         messages: trend._count.id,
       })),
       dateRange: {
-        from: from || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+        from:
+          from || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
         to: to || new Date().toISOString(),
       },
     });
@@ -405,7 +479,8 @@ export async function credits(req, res, next) {
       trends: creditUsage.trends,
       recentPurchases: creditUsage.recentPurchases,
       dateRange: {
-        from: from || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+        from:
+          from || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
         to: to || new Date().toISOString(),
       },
     });
@@ -461,7 +536,8 @@ export async function contacts(req, res, next) {
       genderDistribution: contactInsights.genderDistribution,
       consentBreakdown: contactInsights.consentBreakdown,
       dateRange: {
-        from: from || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+        from:
+          from || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
         to: to || new Date().toISOString(),
       },
     });

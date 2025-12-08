@@ -61,7 +61,10 @@ export async function getSettings(storeId) {
  * @returns {Promise<Object>} Updated settings
  */
 export async function updateSettings(storeId, settingsData) {
-  logger.info('Updating settings', { storeId, fields: Object.keys(settingsData) });
+  logger.info('Updating settings', {
+    storeId,
+    fields: Object.keys(settingsData),
+  });
 
   // Verify shop exists
   const shop = await prisma.shop.findUnique({
@@ -104,9 +107,12 @@ export async function updateSettings(storeId, settingsData) {
 
   // Prepare update data - only include fields that are provided
   const updateData = {};
-  if (settingsData.senderNumber !== undefined) updateData.senderNumber = settingsData.senderNumber;
-  if (settingsData.senderName !== undefined) updateData.senderName = settingsData.senderName;
-  if (settingsData.timezone !== undefined) updateData.timezone = settingsData.timezone;
+  if (settingsData.senderNumber !== undefined)
+    updateData.senderNumber = settingsData.senderNumber;
+  if (settingsData.senderName !== undefined)
+    updateData.senderName = settingsData.senderName;
+  if (settingsData.timezone !== undefined)
+    updateData.timezone = settingsData.timezone;
   if (settingsData.currency !== undefined) {
     updateData.currency = settingsData.currency.toUpperCase();
   }
@@ -125,7 +131,9 @@ export async function updateSettings(storeId, settingsData) {
         senderNumber: settingsData.senderNumber || null,
         senderName: settingsData.senderName || null,
         timezone: settingsData.timezone || 'UTC',
-        currency: settingsData.currency ? settingsData.currency.toUpperCase() : 'EUR',
+        currency: settingsData.currency
+          ? settingsData.currency.toUpperCase()
+          : 'EUR',
       },
     });
   }
@@ -137,7 +145,10 @@ export async function updateSettings(storeId, settingsData) {
       where: { id: storeId },
       data: { currency: normalizedCurrency },
     });
-    logger.info('Currency synced to shop', { storeId, currency: normalizedCurrency });
+    logger.info('Currency synced to shop', {
+      storeId,
+      currency: normalizedCurrency,
+    });
   }
 
   logger.info('Settings updated successfully', { storeId });
@@ -155,35 +166,43 @@ export function getUsageGuide() {
     sections: [
       {
         title: 'SMS Credits',
-        content: 'Each SMS message costs 1 credit. Credits are deducted automatically when messages are sent successfully.',
+        content:
+          'Each SMS message costs 1 credit. Credits are deducted automatically when messages are sent successfully.',
       },
       {
         title: 'Purchasing Credits',
-        content: 'You can purchase credit packages through our secure Stripe checkout. Credits are added to your account immediately after payment.',
+        content:
+          'You can purchase credit packages through our secure Stripe checkout. Credits are added to your account immediately after payment.',
       },
       {
         title: 'Sender Number',
-        content: 'Set your sender number or name to personalize your SMS messages. This will be used for all campaigns and automations.',
+        content:
+          'Set your sender number or name to personalize your SMS messages. This will be used for all campaigns and automations.',
       },
       {
         title: 'Contacts Management',
-        content: 'Import contacts from CSV or add them manually. Contacts with SMS consent can receive your campaigns.',
+        content:
+          'Import contacts from CSV or add them manually. Contacts with SMS consent can receive your campaigns.',
       },
       {
         title: 'Campaigns',
-        content: 'Create targeted SMS campaigns for different audience segments. Schedule campaigns or send them immediately.',
+        content:
+          'Create targeted SMS campaigns for different audience segments. Schedule campaigns or send them immediately.',
       },
       {
         title: 'Automations',
-        content: 'Set up automated SMS messages for birthdays, abandoned carts, and other triggers.',
+        content:
+          'Set up automated SMS messages for birthdays, abandoned carts, and other triggers.',
       },
       {
         title: 'Reports',
-        content: 'Track your SMS performance with detailed reports on delivery rates, engagement, and ROI.',
+        content:
+          'Track your SMS performance with detailed reports on delivery rates, engagement, and ROI.',
       },
       {
         title: 'Support',
-        content: 'Need help? Visit our support center or contact us at support@astronote.com',
+        content:
+          'Need help? Visit our support center or contact us at support@astronote.com',
       },
     ],
   };
@@ -207,11 +226,16 @@ export async function getSenderConfig(storeId) {
 
   // Default sender if not configured
   const senderConfig = {
-    senderNumber: settings?.senderNumber || process.env.MITTO_SENDER_NUMBER || null,
-    senderName: settings?.senderName || process.env.MITTO_SENDER_NAME || 'Astronote',
+    senderNumber:
+      settings?.senderNumber || process.env.MITTO_SENDER_NUMBER || null,
+    senderName:
+      settings?.senderName || process.env.MITTO_SENDER_NAME || 'Astronote',
   };
 
-  logger.info('Sender config retrieved', { storeId, hasSenderNumber: !!senderConfig.senderNumber });
+  logger.info('Sender config retrieved', {
+    storeId,
+    hasSenderNumber: !!senderConfig.senderNumber,
+  });
 
   return senderConfig;
 }
@@ -248,10 +272,15 @@ export async function validateSenderConfig(storeId) {
   }
 
   if (!config.senderNumber) {
-    validation.warnings.push('No sender number configured. Using default sender name.');
+    validation.warnings.push(
+      'No sender number configured. Using default sender name.',
+    );
   }
 
-  logger.info('Sender config validated', { storeId, isValid: validation.isValid });
+  logger.info('Sender config validated', {
+    storeId,
+    isValid: validation.isValid,
+  });
 
   return validation;
 }
@@ -263,4 +292,3 @@ export default {
   getSenderConfig,
   validateSenderConfig,
 };
-

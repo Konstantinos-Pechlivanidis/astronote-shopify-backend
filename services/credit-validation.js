@@ -33,7 +33,7 @@ export async function validateAndConsumeCredits(storeId, messageCount) {
 
   try {
     // Use a transaction to ensure atomic credit validation and deduction
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async tx => {
       // Lock the store row for update to prevent race conditions
       const store = await tx.shop.findUnique({
         where: { id: storeId },
@@ -183,7 +183,11 @@ export async function validateCreditsForMessages(storeId, messageCount) {
  * @param {string} storeId - The store ID
  * @param {string} reason - Reason for skipping
  */
-export async function logAutomationSkip(automationId, storeId, reason = 'Insufficient credits') {
+export async function logAutomationSkip(
+  automationId,
+  storeId,
+  reason = 'Insufficient credits',
+) {
   try {
     await prisma.automationLog.create({
       data: {
@@ -277,7 +281,7 @@ export async function refundCredits(storeId, credits, reason = 'refund') {
 
   try {
     // Use a transaction to ensure atomic credit refund
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async tx => {
       const store = await tx.shop.findUnique({
         where: { id: storeId },
         select: { id: true, credits: true, shopDomain: true },

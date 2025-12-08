@@ -5,6 +5,7 @@ This guide explains what needs to be configured in the Shopify extension to enab
 ## Overview
 
 The automation system requires:
+
 1. **Webhook Registration** - Shopify must send events to our backend
 2. **Customer Data Sync** - Customer information must be available in our database
 3. **SMS Consent Management** - Customers must opt-in to receive SMS
@@ -16,6 +17,7 @@ The automation system requires:
 ### Automatic Registration (Recommended)
 
 Webhooks are **automatically registered** during the OAuth installation flow. The backend registers:
+
 - `orders/create` → Order placed automation
 - `orders/fulfilled` → Order fulfilled automation
 - `customers/create` → Welcome automation (future)
@@ -31,18 +33,21 @@ If automatic registration fails or you need to re-register:
 3. For each event, create a webhook:
 
 **Order Created:**
+
 - Event: `Order creation`
 - Format: `JSON`
 - URL: `https://your-backend-url.com/automation-webhooks/shopify/orders/create`
 - API version: `2024-04`
 
 **Order Fulfilled:**
+
 - Event: `Order fulfillment`
 - Format: `JSON`
 - URL: `https://your-backend-url.com/automation-webhooks/shopify/orders/fulfilled`
 - API version: `2024-04`
 
 **Customer Created (for welcome automation):**
+
 - Event: `Customer creation`
 - Format: `JSON`
 - URL: `https://your-backend-url.com/automation-webhooks/shopify/customers/create`
@@ -55,11 +60,13 @@ If automatic registration fails or you need to re-register:
 ### Automatic Sync (Current Implementation)
 
 **How it works:**
+
 - When a webhook is received (order placed, order fulfilled), the backend automatically creates a contact if it doesn't exist
 - Contact is created from Shopify customer data (email, name, phone)
 - Default `smsConsent` is set to `'unknown'` - customers must opt-in
 
 **What's synced:**
+
 - Email address
 - First name
 - Last name
@@ -67,6 +74,7 @@ If automatic registration fails or you need to re-register:
 - Shop ID (for multi-tenant isolation)
 
 **What's NOT synced automatically:**
+
 - Birth date (must be added manually or via import)
 - Gender (must be added manually)
 - Tags (must be added manually)
@@ -75,6 +83,7 @@ If automatic registration fails or you need to re-register:
 ### Manual Sync (Future Enhancement)
 
 A periodic sync job can be added to sync all customers from Shopify:
+
 - Daily job to fetch all customers via Shopify Admin API
 - Create/update contacts in database
 - Preserve existing SMS consent status
@@ -92,15 +101,18 @@ A periodic sync job can be added to sync all customers from Shopify:
 ### Recommended Extension Implementation
 
 **Option A: Checkout Consent Checkbox**
+
 - Add SMS consent checkbox to Shopify checkout
 - Store consent in customer metafield or order note
 - Sync consent to backend when order is placed
 
 **Option B: Customer Account Page**
+
 - Add SMS consent toggle in customer account area
 - Update via Shopify Admin API or customer-facing API
 
 **Option C: Post-Purchase Page**
+
 - Add SMS consent option after order completion
 - Send consent to backend via API
 
@@ -109,6 +121,7 @@ A periodic sync job can be added to sync all customers from Shopify:
 **Endpoint:** `PUT /contacts/:id`
 
 **Request Body:**
+
 ```json
 {
   "smsConsent": "opted_in"
@@ -116,6 +129,7 @@ A periodic sync job can be added to sync all customers from Shopify:
 ```
 
 **Or via webhook:**
+
 - When order is placed, check for consent in order/customer data
 - Update contact `smsConsent` accordingly
 
@@ -221,12 +235,14 @@ A periodic sync job can be added to sync all customers from Shopify:
 ### Webhooks Not Received
 
 **Check:**
+
 1. Webhook is registered in Shopify Admin
 2. Webhook URL is correct and accessible
 3. Backend is running and receiving requests
 4. Webhook signature verification is passing
 
 **Debug:**
+
 - Check Shopify webhook delivery logs (Shopify Admin → Settings → Notifications → Webhooks)
 - Check backend logs for webhook receipt
 - Test webhook URL manually with curl/Postman
@@ -234,6 +250,7 @@ A periodic sync job can be added to sync all customers from Shopify:
 ### Automation Not Triggering
 
 **Check:**
+
 1. Automation exists and is `active`
 2. Contact exists with matching email
 3. Contact has `smsConsent: 'opted_in'`
@@ -241,6 +258,7 @@ A periodic sync job can be added to sync all customers from Shopify:
 5. Shop has sufficient credits
 
 **Debug:**
+
 - Check automation logs in database
 - Check queue for failed jobs
 - Use manual trigger endpoint to test
@@ -248,12 +266,14 @@ A periodic sync job can be added to sync all customers from Shopify:
 ### SMS Not Sent
 
 **Check:**
+
 1. Mitto API credentials are configured
 2. Shop has sufficient credits
 3. Phone number is valid E.164 format
 4. Message content is valid
 
 **Debug:**
+
 - Check MessageLog table
 - Check Mitto API logs
 - Verify credits balance
@@ -341,4 +361,3 @@ A periodic sync job can be added to sync all customers from Shopify:
 4. **Welcome Automation**
    - Add `customers/create` webhook handler
    - Implement welcome message logic
-

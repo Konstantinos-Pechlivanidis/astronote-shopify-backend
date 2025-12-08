@@ -1,5 +1,8 @@
 import { logger } from '../../utils/logger.js';
-import { updateCampaignDeliveryStatuses, updateAllActiveCampaigns } from '../../services/delivery-status.js';
+import {
+  updateCampaignDeliveryStatuses,
+  updateAllActiveCampaigns,
+} from '../../services/delivery-status.js';
 
 /**
  * Update delivery status for a specific campaign
@@ -67,4 +70,3 @@ export default {
   handleCampaignStatusUpdate,
   handleAllCampaignsStatusUpdate,
 };
-

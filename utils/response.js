@@ -44,16 +44,45 @@ export function sendPaginated(res, items, pagination, meta = {}) {
   // Standardize pagination format
   const standardizedPagination = {
     page: pagination.page || pagination.currentPage || 1,
-    pageSize: pagination.pageSize || pagination.limit || pagination.perPage || 20,
+    pageSize:
+      pagination.pageSize || pagination.limit || pagination.perPage || 20,
     total: pagination.total || pagination.totalCount || 0,
-    totalPages: pagination.totalPages || pagination.pages || Math.ceil((pagination.total || pagination.totalCount || 0) / (pagination.pageSize || pagination.limit || pagination.perPage || 20)),
-    hasNextPage: pagination.hasNextPage !== undefined ? pagination.hasNextPage : (pagination.page || pagination.currentPage || 1) < (pagination.totalPages || pagination.pages || Math.ceil((pagination.total || pagination.totalCount || 0) / (pagination.pageSize || pagination.limit || pagination.perPage || 20))),
-    hasPrevPage: pagination.hasPrevPage !== undefined ? pagination.hasPrevPage : (pagination.page || pagination.currentPage || 1) > 1,
+    totalPages:
+      pagination.totalPages ||
+      pagination.pages ||
+      Math.ceil(
+        (pagination.total || pagination.totalCount || 0) /
+          (pagination.pageSize || pagination.limit || pagination.perPage || 20),
+      ),
+    hasNextPage:
+      pagination.hasNextPage !== undefined
+        ? pagination.hasNextPage
+        : (pagination.page || pagination.currentPage || 1) <
+          (pagination.totalPages ||
+            pagination.pages ||
+            Math.ceil(
+              (pagination.total || pagination.totalCount || 0) /
+                (pagination.pageSize ||
+                  pagination.limit ||
+                  pagination.perPage ||
+                  20),
+            )),
+    hasPrevPage:
+      pagination.hasPrevPage !== undefined
+        ? pagination.hasPrevPage
+        : (pagination.page || pagination.currentPage || 1) > 1,
   };
 
   // Support custom item names in meta (e.g., { contacts: [...], filters: {...} })
   // If meta contains arrays like 'contacts', 'campaigns', include them in response
-  const itemKeys = ['contacts', 'campaigns', 'templates', 'transactions', 'discounts', 'audiences'];
+  const itemKeys = [
+    'contacts',
+    'campaigns',
+    'templates',
+    'transactions',
+    'discounts',
+    'audiences',
+  ];
   const responseData = { ...meta };
 
   // Add items array (always include, even if empty)
@@ -92,17 +121,51 @@ export function sendPaginated(res, items, pagination, meta = {}) {
 }
 
 /**
- * Standard error response (use global error handler instead)
- * This is kept for backward compatibility but should use next(error) instead
- * @deprecated Use next(error) with AppError classes instead
+ * Standard error response
+ * Supports multiple signatures for backward compatibility:
+ * - sendError(res, statusCode, code, message, data) - New format
+ * - sendError(res, error, message, statusCode) - Legacy format
+ *
+ * @param {Object} res - Express response object
+ * @param {number|Object|string} statusCodeOrError - Status code (new) or error object/string (legacy)
+ * @param {string} codeOrMessage - Error code (new) or message (legacy)
+ * @param {string} messageOrStatusCode - Message (new) or status code (legacy)
+ * @param {Object} dataOrMessage - Additional data (new) or message (legacy)
  */
-export function sendError(res, error, message = null, statusCode = 400) {
+export function sendError(
+  res,
+  statusCodeOrError,
+  codeOrMessage,
+  messageOrStatusCode,
+  dataOrMessage,
+) {
+  // Detect which signature is being used
+  let statusCode, code, message, data;
+
+  if (typeof statusCodeOrError === 'number') {
+    // New format: sendError(res, statusCode, code, message, data)
+    statusCode = statusCodeOrError;
+    code = codeOrMessage || 'error';
+    message = messageOrStatusCode || 'An error occurred';
+    data = dataOrMessage;
+  } else {
+    // Legacy format: sendError(res, error, message, statusCode)
+    const error = statusCodeOrError;
+    statusCode = messageOrStatusCode || error?.statusCode || 400;
+    code = error?.code || (typeof error === 'string' ? error : 'error');
+    message = codeOrMessage || error?.message || 'An error occurred';
+    data = undefined;
+  }
+
   const response = {
     success: false,
-    error: error.code || error || 'error',
-    message: message || error.message || 'An error occurred',
+    error: code,
+    message,
   };
+
+  if (data) {
+    response.data = data;
+  }
 
   return res.status(statusCode).json(response);
 }
-

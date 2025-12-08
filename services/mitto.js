@@ -1,6 +1,9 @@
 import axios from 'axios';
 import { logger } from '../utils/logger.js';
-import { validateAndConsumeCredits, InsufficientCreditsError } from './credit-validation.js';
+import {
+  validateAndConsumeCredits,
+  InsufficientCreditsError,
+} from './credit-validation.js';
 
 // Custom error classes for better error handling
 export class MittoApiError extends Error {
@@ -60,7 +63,7 @@ const mitto = axios.create({
   timeout: 30000,
 });
 
-mitto.interceptors.request.use((config) => {
+mitto.interceptors.request.use(config => {
   config.headers = {
     ...(config.headers || {}),
     'X-Mitto-API-Key': process.env.MITTO_API_KEY,
@@ -70,8 +73,8 @@ mitto.interceptors.request.use((config) => {
 });
 
 mitto.interceptors.response.use(
-  (response) => response,
-  (error) => {
+  response => response,
+  error => {
     const status = error.response?.status;
     const response = error.response?.data;
 
@@ -99,7 +102,13 @@ mitto.interceptors.response.use(
  * @param {boolean} [params.skipCreditCheck] - Skip credit consumption (for campaign messages where credits already consumed)
  * @returns {Promise<{messageId: string, status: string}>}
  */
-export async function sendSms({ to, text, senderOverride = null, shopId = null, skipCreditCheck = false }) {
+export async function sendSms({
+  to,
+  text,
+  senderOverride = null,
+  shopId = null,
+  skipCreditCheck = false,
+}) {
   try {
     // Validate phone number
     if (!validateE164PhoneNumber(to)) {

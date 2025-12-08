@@ -70,7 +70,8 @@ export async function getDashboard(storeId) {
     // Extract results with fallback to 0 on error
     totalCampaigns = results[0].status === 'fulfilled' ? results[0].value : 0;
     totalContacts = results[1].status === 'fulfilled' ? results[1].value : 0;
-    totalMessagesSent = results[2].status === 'fulfilled' ? results[2].value : 0;
+    totalMessagesSent =
+      results[2].status === 'fulfilled' ? results[2].value : 0;
 
     // Log any errors
     results.forEach((result, index) => {
@@ -167,9 +168,12 @@ export async function getOverview(storeId) {
     ]);
 
     smsStats = results[0].status === 'fulfilled' ? results[0].value : smsStats;
-    contactStats = results[1].status === 'fulfilled' ? results[1].value : contactStats;
-    recentMessages = results[2].status === 'fulfilled' ? results[2].value : recentMessages;
-    recentTransactions = results[3].status === 'fulfilled' ? results[3].value : recentTransactions;
+    contactStats =
+      results[1].status === 'fulfilled' ? results[1].value : contactStats;
+    recentMessages =
+      results[2].status === 'fulfilled' ? results[2].value : recentMessages;
+    recentTransactions =
+      results[3].status === 'fulfilled' ? results[3].value : recentTransactions;
 
     // Log any errors
     results.forEach((result, index) => {
@@ -190,7 +194,10 @@ export async function getOverview(storeId) {
     // Continue with default values
   }
 
-  const wallet = { balance: shop.credits || 0, currency: shop.currency || 'EUR' };
+  const wallet = {
+    balance: shop.credits || 0,
+    currency: shop.currency || 'EUR',
+  };
 
   logger.info('Dashboard overview fetched successfully', {
     storeId,
@@ -253,7 +260,11 @@ export async function getQuickStats(storeId) {
     // Continue with default value
   }
 
-  logger.info('Quick stats fetched successfully', { storeId, smsSent, balance: shop.credits || 0 });
+  logger.info('Quick stats fetched successfully', {
+    storeId,
+    smsSent,
+    balance: shop.credits || 0,
+  });
 
   return {
     smsSent: smsSent || 0,
@@ -275,7 +286,8 @@ async function getSmsStats(shopId) {
   });
 
   const sent = stats.find(s => s.status === 'sent')?._count?.status || 0;
-  const delivered = stats.find(s => s.status === 'delivered')?._count?.status || 0;
+  const delivered =
+    stats.find(s => s.status === 'delivered')?._count?.status || 0;
   const failed = stats.find(s => s.status === 'failed')?._count?.status || 0;
   const deliveryRate = sent > 0 ? (delivered / sent) * 100 : 0;
 
@@ -301,8 +313,10 @@ async function getContactStats(shopId) {
   });
 
   const total = stats.reduce((sum, stat) => sum + stat._count.smsConsent, 0);
-  const optedIn = stats.find(s => s.smsConsent === 'opted_in')?._count?.smsConsent || 0;
-  const optedOut = stats.find(s => s.smsConsent === 'opted_out')?._count?.smsConsent || 0;
+  const optedIn =
+    stats.find(s => s.smsConsent === 'opted_in')?._count?.smsConsent || 0;
+  const optedOut =
+    stats.find(s => s.smsConsent === 'opted_out')?._count?.smsConsent || 0;
 
   return { total, optedIn, optedOut };
 }
@@ -356,4 +370,3 @@ export default {
   getOverview,
   getQuickStats,
 };
-

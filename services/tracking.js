@@ -15,13 +15,26 @@ import { ValidationError, NotFoundError } from '../utils/errors.js';
  * @param {string} storeId - Optional store ID for security validation (used when called from API)
  * @returns {Promise<Object>} Updated message log
  */
-export async function trackMessageStatus(messageId, status, metadata = {}, storeId = null) {
+export async function trackMessageStatus(
+  messageId,
+  status,
+  metadata = {},
+  storeId = null,
+) {
   logger.info('Tracking message status', { messageId, status, storeId });
 
   // Validate status
-  const validStatuses = ['queued', 'sent', 'delivered', 'failed', 'undelivered'];
+  const validStatuses = [
+    'queued',
+    'sent',
+    'delivered',
+    'failed',
+    'undelivered',
+  ];
   if (!validStatuses.includes(status)) {
-    throw new ValidationError(`Invalid status. Must be one of: ${validStatuses.join(', ')}`);
+    throw new ValidationError(
+      `Invalid status. Must be one of: ${validStatuses.join(', ')}`,
+    );
   }
 
   // ✅ Security: Find message with optional storeId validation
@@ -118,7 +131,9 @@ export async function processDeliveryWebhook(webhookData) {
   const { messageId, status, timestamp, errorCode, errorMessage } = webhookData;
 
   if (!messageId || !status) {
-    throw new ValidationError('Missing required webhook fields: messageId, status');
+    throw new ValidationError(
+      'Missing required webhook fields: messageId, status',
+    );
   }
 
   const metadata = {
@@ -229,9 +244,12 @@ export async function getDeliveryStats(storeId, filters = {}) {
   const stats = {
     total,
     sent: statusBreakdown.find(s => s.status === 'sent')?._count?.status || 0,
-    delivered: statusBreakdown.find(s => s.status === 'delivered')?._count?.status || 0,
-    failed: statusBreakdown.find(s => s.status === 'failed')?._count?.status || 0,
-    queued: statusBreakdown.find(s => s.status === 'queued')?._count?.status || 0,
+    delivered:
+      statusBreakdown.find(s => s.status === 'delivered')?._count?.status || 0,
+    failed:
+      statusBreakdown.find(s => s.status === 'failed')?._count?.status || 0,
+    queued:
+      statusBreakdown.find(s => s.status === 'queued')?._count?.status || 0,
     deliveryRate: total > 0 ? (deliveryRate._count / total) * 100 : 0,
   };
 
@@ -323,7 +341,11 @@ export async function getFailedMessages(storeId, filters = {}) {
 
   const totalPages = Math.ceil(total / parseInt(pageSize));
 
-  logger.info('Failed messages retrieved', { storeId, total, returned: messages.length });
+  logger.info('Failed messages retrieved', {
+    storeId,
+    total,
+    returned: messages.length,
+  });
 
   return {
     messages,
@@ -346,4 +368,3 @@ export default {
   getRecentActivity,
   getFailedMessages,
 };
-

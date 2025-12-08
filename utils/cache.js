@@ -10,7 +10,11 @@ class CacheManager {
 
   async initialize() {
     // Skip Redis in development if not explicitly configured
-    if (process.env.NODE_ENV === 'development' && !process.env.REDIS_HOST && !process.env.REDIS_URL) {
+    if (
+      process.env.NODE_ENV === 'development' &&
+      !process.env.REDIS_HOST &&
+      !process.env.REDIS_URL
+    ) {
       logger.info('Development mode: Using memory cache (Redis disabled)');
       this.redis = null;
       return;
@@ -25,7 +29,9 @@ class CacheManager {
       await this.redis.connect();
       logger.info('Redis cache initialized');
     } catch (error) {
-      logger.warn('Redis connection failed, falling back to memory cache', { error: error.message });
+      logger.warn('Redis connection failed, falling back to memory cache', {
+        error: error.message,
+      });
       this.redis = null;
     }
   }
@@ -150,7 +156,12 @@ class CacheManager {
     return async (req, res, next) => {
       const cacheKey = keyGenerator
         ? keyGenerator(req)
-        : this.generateKey('api', req.method, req.originalUrl, JSON.stringify(req.query));
+        : this.generateKey(
+          'api',
+          req.method,
+          req.originalUrl,
+          JSON.stringify(req.query),
+        );
 
       try {
         const cached = await this.get(cacheKey);
@@ -168,7 +179,7 @@ class CacheManager {
       // Override json method to cache response
       res.json = function (data) {
         // Cache the response
-        cacheManager.set(cacheKey, data, ttlSeconds).catch((err) => {
+        cacheManager.set(cacheKey, data, ttlSeconds).catch(err => {
           logger.error('Cache set error', { error: err.message });
         });
 
@@ -203,13 +214,14 @@ cacheManager.initialize();
 
 // Cache keys constants
 export const CACHE_KEYS = {
-  SHOP_DATA: (shopDomain) => `shop:${shopDomain}`,
+  SHOP_DATA: shopDomain => `shop:${shopDomain}`,
   CONTACTS: (shopId, page, limit) => `contacts:${shopId}:${page}:${limit}`,
   CAMPAIGNS: (shopId, page, limit) => `campaigns:${shopId}:${page}:${limit}`,
   TEMPLATES: (page, limit) => `templates:${page}:${limit}`,
-  REPORTS: (shopId, type, dateRange) => `reports:${shopId}:${type}:${dateRange}`,
-  WALLET_BALANCE: (shopId) => `wallet:${shopId}`,
-  SEGMENTS: (shopId) => `segments:${shopId}`,
+  REPORTS: (shopId, type, dateRange) =>
+    `reports:${shopId}:${type}:${dateRange}`,
+  WALLET_BALANCE: shopId => `wallet:${shopId}`,
+  SEGMENTS: shopId => `segments:${shopId}`,
 };
 
 // Cache TTL constants (in seconds)

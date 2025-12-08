@@ -17,7 +17,10 @@ import {
   importContactsSchema,
   birthdayContactsQuerySchema,
 } from '../schemas/contacts.schema.js';
-import { contactsRateLimit, importRateLimit } from '../middlewares/rateLimits.js';
+import {
+  contactsRateLimit,
+  importRateLimit,
+} from '../middlewares/rateLimits.js';
 import {
   contactsListCache,
   contactsStatsCache,
@@ -37,25 +40,50 @@ const router = express.Router();
 router.use(contactsRateLimit);
 
 // GET /api/contacts - List contacts with filtering, search, and pagination
-router.get('/', validateQuery(listContactsQuerySchema), contactsListCache, list);
+router.get(
+  '/',
+  validateQuery(listContactsQuerySchema),
+  contactsListCache,
+  list,
+);
 
 // GET /api/contacts/stats - Get contact statistics
 router.get('/stats', contactsStatsCache, stats);
 
 // GET /api/contacts/birthdays - Get contacts with birthdays
-router.get('/birthdays', validateQuery(birthdayContactsQuerySchema), getBirthdayContacts);
+router.get(
+  '/birthdays',
+  validateQuery(birthdayContactsQuerySchema),
+  getBirthdayContacts,
+);
 
 // GET /api/contacts/:id - Get single contact
 router.get('/:id', getOne);
 
 // POST /api/contacts - Create new contact
-router.post('/', validateBody(createContactSchema), invalidateContactsCache, create);
+router.post(
+  '/',
+  validateBody(createContactSchema),
+  invalidateContactsCache,
+  create,
+);
 
 // POST /api/contacts/import - Import contacts from CSV (stricter rate limit)
-router.post('/import', importRateLimit, validateBody(importContactsSchema), invalidateContactsCache, importCsv);
+router.post(
+  '/import',
+  importRateLimit,
+  validateBody(importContactsSchema),
+  invalidateContactsCache,
+  importCsv,
+);
 
 // PUT /api/contacts/:id - Update contact
-router.put('/:id', validateBody(updateContactSchema), invalidateContactsCache, update);
+router.put(
+  '/:id',
+  validateBody(updateContactSchema),
+  invalidateContactsCache,
+  update,
+);
 
 // DELETE /api/contacts/:id - Delete contact
 router.delete('/:id', invalidateContactsCache, remove);

@@ -10,8 +10,11 @@ export const optInSchema = z.object({
     .string()
     .trim()
     .min(1, 'Phone number is required')
-    .regex(/^\+[1-9]\d{1,14}$/, 'Phone number must be in E.164 format (e.g., +306977123456)'),
-  consent: z.boolean().refine((val) => val === true, {
+    .regex(
+      /^\+[1-9]\d{1,14}$/,
+      'Phone number must be in E.164 format (e.g., +306977123456)',
+    ),
+  consent: z.boolean().refine(val => val === true, {
     message: 'Consent is required to subscribe to SMS marketing',
   }),
   shopDomain: z
@@ -36,10 +39,7 @@ export const optInSchema = z.object({
     .trim()
     .min(1, 'Birthday is required')
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'Birthday must be in YYYY-MM-DD format'),
-  gender: z
-    .enum(['male', 'female', 'other'])
-    .optional()
-    .nullable(),
+  gender: z.enum(['male', 'female', 'other']).optional().nullable(),
 
   // Metadata
   source: z.string().optional().default('theme-banner'),
@@ -48,4 +48,3 @@ export const optInSchema = z.object({
 export default {
   optInSchema,
 };
-

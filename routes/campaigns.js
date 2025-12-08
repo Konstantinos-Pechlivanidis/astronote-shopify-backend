@@ -7,7 +7,10 @@ import {
   listCampaignsQuerySchema,
   scheduleCampaignSchema,
 } from '../schemas/campaigns.schema.js';
-import { campaignsRateLimit, campaignSendRateLimit } from '../middlewares/rateLimits.js';
+import {
+  campaignsRateLimit,
+  campaignSendRateLimit,
+} from '../middlewares/rateLimits.js';
 import {
   campaignsListCache,
   campaignMetricsCache,
@@ -20,7 +23,12 @@ const r = Router();
 r.use(campaignsRateLimit);
 
 // GET /campaigns - List campaigns with filtering
-r.get('/', validateQuery(listCampaignsQuerySchema), campaignsListCache, ctrl.list);
+r.get(
+  '/',
+  validateQuery(listCampaignsQuerySchema),
+  campaignsListCache,
+  ctrl.list,
+);
 
 // GET /campaigns/stats/summary - Get campaign statistics
 r.get('/stats/summary', campaignsListCache, ctrl.stats);
@@ -29,10 +37,20 @@ r.get('/stats/summary', campaignsListCache, ctrl.stats);
 r.get('/:id', ctrl.getOne);
 
 // POST /campaigns - Create new campaign
-r.post('/', validateBody(createCampaignSchema), invalidateCampaignsCache, ctrl.create);
+r.post(
+  '/',
+  validateBody(createCampaignSchema),
+  invalidateCampaignsCache,
+  ctrl.create,
+);
 
 // PUT /campaigns/:id - Update campaign
-r.put('/:id', validateBody(updateCampaignSchema), invalidateCampaignsCache, ctrl.update);
+r.put(
+  '/:id',
+  validateBody(updateCampaignSchema),
+  invalidateCampaignsCache,
+  ctrl.update,
+);
 
 // DELETE /campaigns/:id - Delete campaign
 r.delete('/:id', invalidateCampaignsCache, ctrl.remove);
@@ -41,10 +59,20 @@ r.delete('/:id', invalidateCampaignsCache, ctrl.remove);
 r.post('/:id/prepare', ctrl.prepare);
 
 // POST /campaigns/:id/send - Send campaign immediately (stricter rate limit)
-r.post('/:id/send', campaignSendRateLimit, invalidateCampaignsCache, ctrl.sendNow);
+r.post(
+  '/:id/send',
+  campaignSendRateLimit,
+  invalidateCampaignsCache,
+  ctrl.sendNow,
+);
 
 // PUT /campaigns/:id/schedule - Schedule campaign
-r.put('/:id/schedule', validateBody(scheduleCampaignSchema), invalidateCampaignsCache, ctrl.schedule);
+r.put(
+  '/:id/schedule',
+  validateBody(scheduleCampaignSchema),
+  invalidateCampaignsCache,
+  ctrl.schedule,
+);
 
 // GET /campaigns/:id/metrics - Get campaign metrics
 r.get('/:id/metrics', campaignMetricsCache, ctrl.metrics);
@@ -53,6 +81,10 @@ r.get('/:id/metrics', campaignMetricsCache, ctrl.metrics);
 r.post('/:id/retry-failed', invalidateCampaignsCache, ctrl.retryFailed);
 
 // POST /campaigns/:id/update-status - Manually trigger delivery status update
-r.post('/:id/update-status', invalidateCampaignsCache, ctrl.updateDeliveryStatus);
+r.post(
+  '/:id/update-status',
+  invalidateCampaignsCache,
+  ctrl.updateDeliveryStatus,
+);
 
 export default r;

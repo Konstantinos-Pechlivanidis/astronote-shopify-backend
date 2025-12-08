@@ -1,7 +1,13 @@
 import prisma from './prisma.js';
 import { logger } from '../utils/logger.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
-import { createStripeCheckoutSession } from './stripe.js';
+import { createStripeCheckoutSession, getStripePriceId } from './stripe.js';
+import {
+  credit,
+  debit,
+  refund as refundCredits,
+  getBalance as getWalletBalance,
+} from './wallet.js';
 
 /**
  * Billing Service
@@ -9,8 +15,10 @@ import { createStripeCheckoutSession } from './stripe.js';
  */
 
 /**
- * Credit packages configuration
+ * Credit packages configuration (deprecated - now using Package model)
+ * @deprecated Use Package model from database instead
  */
+/*
 const CREDIT_PACKAGES = [
   {
     id: 'package_1000',
@@ -61,6 +69,7 @@ const CREDIT_PACKAGES = [
     features: ['25,000 SMS messages', 'No expiration', 'Dedicated support', '33% savings'],
   },
 ];
+*/
 
 /**
  * Get credit balance for store
@@ -72,52 +81,66 @@ export async function getBalance(storeId) {
 
   const shop = await prisma.shop.findUnique({
     where: { id: storeId },
-    select: { credits: true, currency: true },
+    select: { currency: true },
   });
 
   if (!shop) {
     throw new NotFoundError('Shop');
   }
 
-  logger.info('Balance retrieved', { storeId, credits: shop.credits });
+  // Use Wallet service instead of Shop.credits
+  const balance = await getWalletBalance(storeId);
+
+  logger.info('Balance retrieved', { storeId, credits: balance });
 
   return {
-    credits: shop.credits || 0,
-    balance: shop.credits || 0, // Alias for consistency
+    credits: balance,
+    balance, // Alias for consistency
     currency: shop.currency || 'EUR',
   };
 }
 
 /**
- * Get available credit packages
+ * Get available credit packages from database
  * @param {string} currency - Currency code (EUR or USD), defaults to EUR
- * @returns {Array} Available packages with currency-specific pricing
+ * @returns {Promise<Array>} Available packages with currency-specific pricing
  */
-export function getPackages(currency = 'EUR') {
+export async function getPackages(currency = 'EUR') {
   logger.info('Getting credit packages', { currency });
 
-  return CREDIT_PACKAGES.map(pkg => ({
+  const packages = await prisma.package.findMany({
+    where: { active: true },
+    orderBy: { units: 'asc' },
+  });
+
+  return packages.map(pkg => ({
     id: pkg.id,
     name: pkg.name,
-    credits: pkg.credits,
-    price: currency === 'USD' ? pkg.priceUSD : pkg.priceEUR,
+    credits: pkg.units,
+    price: (pkg.priceCents / 100).toFixed(2),
     currency,
-    description: pkg.description,
-    popular: pkg.popular,
-    features: pkg.features,
+    // Get Stripe price ID for this currency
+    stripePriceId:
+      currency === 'USD' ? pkg.stripePriceIdUsd : pkg.stripePriceIdEur,
   }));
 }
 
 /**
- * Get package by ID
+ * Get package by ID from database
  * @param {string} packageId - Package ID
- * @returns {Object} Package details
+ * @returns {Promise<Object>} Package details
  */
-export function getPackageById(packageId) {
-  const pkg = CREDIT_PACKAGES.find(p => p.id === packageId);
+export async function getPackageById(packageId) {
+  const pkg = await prisma.package.findUnique({
+    where: { id: packageId },
+  });
 
   if (!pkg) {
     throw new NotFoundError('Package');
+  }
+
+  if (!pkg.active) {
+    throw new ValidationError('Package is not active');
   }
 
   return pkg;
@@ -130,16 +153,28 @@ export function getPackageById(packageId) {
  * @param {Object} returnUrls - Success and cancel URLs
  * @returns {Promise<Object>} Checkout session
  */
-export async function createPurchaseSession(storeId, packageId, returnUrls, requestedCurrency = null) {
-  logger.info('Creating purchase session', { storeId, packageId, requestedCurrency });
+export async function createPurchaseSession(
+  storeId,
+  packageId,
+  returnUrls,
+  requestedCurrency = null,
+) {
+  logger.info('Creating purchase session', {
+    storeId,
+    packageId,
+    requestedCurrency,
+  });
 
   // Validate package
   let pkg;
   try {
-    pkg = getPackageById(packageId);
-    logger.debug('Package found', { packageId, credits: pkg.credits });
+    pkg = await getPackageById(packageId);
+    logger.debug('Package found', { packageId, credits: pkg.units });
   } catch (packageError) {
-    logger.error('Invalid package ID', { packageId, error: packageError.message });
+    logger.error('Invalid package ID', {
+      packageId,
+      error: packageError.message,
+    });
     throw packageError;
   }
 
@@ -156,9 +191,16 @@ export async function createPurchaseSession(storeId, packageId, returnUrls, requ
       throw new NotFoundError('Shop');
     }
 
-    logger.debug('Shop found', { storeId, shopDomain: shop.shopDomain, currency: shop.currency });
+    logger.debug('Shop found', {
+      storeId,
+      shopDomain: shop.shopDomain,
+      currency: shop.currency,
+    });
   } catch (shopError) {
-    logger.error('Failed to retrieve shop', { storeId, error: shopError.message });
+    logger.error('Failed to retrieve shop', {
+      storeId,
+      error: shopError.message,
+    });
     throw shopError;
   }
 
@@ -172,38 +214,31 @@ export async function createPurchaseSession(storeId, packageId, returnUrls, requ
   const validCurrencies = ['EUR', 'USD'];
   let currency = 'EUR';
 
-  if (requestedCurrency && validCurrencies.includes(requestedCurrency.toUpperCase())) {
+  if (
+    requestedCurrency &&
+    validCurrencies.includes(requestedCurrency.toUpperCase())
+  ) {
     currency = requestedCurrency.toUpperCase();
-  } else if (shop.currency && validCurrencies.includes(shop.currency.toUpperCase())) {
+  } else if (
+    shop.currency &&
+    validCurrencies.includes(shop.currency.toUpperCase())
+  ) {
     currency = shop.currency.toUpperCase();
   }
 
-  const price = currency === 'USD' ? pkg.priceUSD : pkg.priceEUR;
-  const stripePriceId = currency === 'USD'
-    ? pkg.stripePriceIdUSD
-    : pkg.stripePriceIdEUR;
+  const price = pkg.priceCents / 100; // Convert from cents
+  const stripePriceId = getStripePriceId(pkg.name, currency, pkg);
 
-  // Validate Stripe price ID - must start with 'price_' and be a valid Stripe price ID format
+  // Validate Stripe price ID
   if (!stripePriceId) {
     logger.error('Missing Stripe price ID', {
       currency,
       packageId,
-      priceIdEUR: pkg.stripePriceIdEUR,
-      priceIdUSD: pkg.stripePriceIdUSD,
+      packageName: pkg.name,
     });
-    throw new ValidationError(`Stripe price ID is not configured for ${currency}. Please set STRIPE_PRICE_ID_${pkg.credits}_${currency} environment variable.`);
-  }
-
-  // Check if it's a placeholder (fallback value) - these won't work with Stripe
-  const isPlaceholder = stripePriceId.includes('_credits_') || !stripePriceId.startsWith('price_');
-  if (isPlaceholder) {
-    logger.warn('Using placeholder Stripe price ID - this will fail with Stripe API', {
-      currency,
-      stripePriceId,
-      packageId,
-      message: 'Please configure actual Stripe price IDs in environment variables',
-    });
-    // Don't throw here - let Stripe API return the actual error for better debugging
+    throw new ValidationError(
+      `Stripe price ID is not configured for ${currency}. Please set the price ID in the Package model or environment variable.`,
+    );
   }
 
   logger.debug('Stripe configuration', {
@@ -213,16 +248,16 @@ export async function createPurchaseSession(storeId, packageId, returnUrls, requ
     packageId,
   });
 
-  // Create billing transaction record
-  const transaction = await prisma.billingTransaction.create({
+  // Create Purchase record instead of BillingTransaction
+  const purchase = await prisma.purchase.create({
     data: {
       shopId: storeId,
-      creditsAdded: pkg.credits,
-      amount: Math.round(price * 100), // Convert to cents
-      currency, // Use shop currency
-      packageType: packageId,
-      stripeSessionId: 'pending', // Will be updated after Stripe session creation
+      packageId: pkg.id,
+      units: pkg.units,
+      priceCents: pkg.priceCents,
       status: 'pending',
+      currency,
+      stripePriceId,
     },
   });
 
@@ -238,8 +273,8 @@ export async function createPurchaseSession(storeId, packageId, returnUrls, requ
     });
 
     session = await createStripeCheckoutSession({
-      packageId,
-      credits: pkg.credits,
+      packageId: pkg.id,
+      credits: pkg.units,
       price,
       currency,
       stripePriceId, // Use selected price ID based on currency
@@ -249,9 +284,11 @@ export async function createPurchaseSession(storeId, packageId, returnUrls, requ
       cancelUrl: returnUrls.cancelUrl,
       metadata: {
         storeId,
-        packageId,
-        transactionId: transaction.id,
-        credits: pkg.credits.toString(),
+        shopId: storeId, // Keep for backward compatibility
+        packageId: pkg.id,
+        purchaseId: purchase.id,
+        credits: pkg.units.toString(),
+        type: 'credit_pack', // Mark as credit pack purchase
       },
     });
 
@@ -270,15 +307,17 @@ export async function createPurchaseSession(storeId, packageId, returnUrls, requ
       currency,
     });
 
-    // Clean up the transaction record if Stripe session creation fails
+    // Clean up the purchase record if Stripe session creation fails
     try {
-      await prisma.billingTransaction.delete({
-        where: { id: transaction.id },
+      await prisma.purchase.delete({
+        where: { id: purchase.id },
       });
-      logger.debug('Cleaned up failed transaction record', { transactionId: transaction.id });
+      logger.debug('Cleaned up failed purchase record', {
+        purchaseId: purchase.id,
+      });
     } catch (cleanupError) {
-      logger.warn('Failed to clean up transaction record', {
-        transactionId: transaction.id,
+      logger.warn('Failed to clean up purchase record', {
+        purchaseId: purchase.id,
         error: cleanupError.message,
       });
     }
@@ -286,35 +325,36 @@ export async function createPurchaseSession(storeId, packageId, returnUrls, requ
     throw stripeError;
   }
 
-  // Update transaction with Stripe session ID
-  await prisma.billingTransaction.update({
-    where: { id: transaction.id },
-    data: { stripeSessionId: session.id },
+  // Update purchase with Stripe session ID
+  await prisma.purchase.update({
+    where: { id: purchase.id },
+    data: {
+      stripeSessionId: session.id,
+      stripePaymentIntentId: session.payment_intent || null,
+      stripeCustomerId: session.customer || null,
+    },
   });
 
   logger.info('Purchase session created', {
     storeId,
     packageId,
     sessionId: session.id,
-    transactionId: transaction.id,
+    purchaseId: purchase.id,
   });
 
-  // Return package info without internal Stripe price IDs
+  // Return package info
   const packageInfo = {
     id: pkg.id,
     name: pkg.name,
-    credits: pkg.credits,
-    price: currency === 'USD' ? pkg.priceUSD : pkg.priceEUR,
+    credits: pkg.units,
+    price: price.toFixed(2),
     currency,
-    description: pkg.description,
-    popular: pkg.popular,
-    features: pkg.features,
   };
 
   return {
     sessionId: session.id,
     sessionUrl: session.url,
-    transactionId: transaction.id,
+    purchaseId: purchase.id,
     package: packageInfo,
   };
 }
@@ -332,9 +372,24 @@ export async function handleStripeWebhook(stripeEvent) {
 
   if (stripeEvent.type === 'checkout.session.completed') {
     const session = stripeEvent.data.object;
+    const metadata = session.metadata || {};
+    const type = metadata.type;
+
+    // Skip subscription and top-up - they are handled in webhook controller
+    if (type === 'subscription' || type === 'credit_topup') {
+      logger.debug(
+        'Skipping subscription/top-up in billing service (handled in webhook controller)',
+        {
+          sessionId: session.id,
+          type,
+        },
+      );
+      return { status: 'ignored', reason: 'handled_elsewhere' };
+    }
+
     // Support both shopId and storeId (they are the same - shop.id)
-    const storeId = session.metadata.storeId || session.metadata.shopId;
-    const { transactionId, credits } = session.metadata;
+    const storeId = metadata.storeId || metadata.shopId;
+    const { purchaseId, packageId, credits } = metadata;
 
     if (!storeId) {
       logger.error('Missing storeId/shopId in session metadata', {
@@ -342,14 +397,6 @@ export async function handleStripeWebhook(stripeEvent) {
         metadata: session.metadata,
       });
       throw new ValidationError('Missing storeId/shopId in session metadata');
-    }
-
-    if (!transactionId) {
-      logger.error('Missing transactionId in session metadata', {
-        sessionId: session.id,
-        metadata: session.metadata,
-      });
-      throw new ValidationError('Missing transactionId in session metadata');
     }
 
     if (!credits) {
@@ -362,44 +409,143 @@ export async function handleStripeWebhook(stripeEvent) {
 
     logger.info('Processing completed checkout', {
       storeId,
-      transactionId,
+      purchaseId,
       sessionId: session.id,
     });
 
-    // Find transaction
-    const transaction = await prisma.billingTransaction.findUnique({
-      where: { id: transactionId },
-    });
-
-    if (!transaction) {
-      logger.error('Transaction not found', { transactionId });
-      throw new NotFoundError('Transaction');
+    // Find purchase record (matching retail-backend pattern)
+    // First try with all constraints, then fallback to just session ID (for robustness)
+    let purchase = null;
+    if (purchaseId && packageId) {
+      purchase = await prisma.purchase.findFirst({
+        where: {
+          id: purchaseId,
+          shopId: storeId,
+          packageId,
+          status: 'pending',
+        },
+        include: { package: true },
+      });
     }
 
-    if (transaction.status === 'completed') {
-      logger.warn('Transaction already completed', { transactionId });
+    // Fallback: find by session ID with constraints
+    if (!purchase) {
+      purchase = await prisma.purchase.findFirst({
+        where: {
+          stripeSessionId: session.id,
+          shopId: storeId,
+          status: 'pending',
+        },
+        include: { package: true },
+      });
+    }
+
+    // Final fallback: find by session ID only (in case metadata doesn't match exactly)
+    if (!purchase) {
+      purchase = await prisma.purchase.findFirst({
+        where: {
+          stripeSessionId: session.id,
+          status: 'pending',
+        },
+        include: { package: true },
+      });
+    }
+
+    if (!purchase) {
+      logger.warn('Purchase record not found for completed checkout', {
+        purchaseId,
+        sessionId: session.id,
+        shopId: storeId,
+        packageId,
+      });
+      throw new NotFoundError('Purchase');
+    }
+
+    // Validate shopId matches if we found by session ID only (security check)
+    if (purchase.shopId !== storeId) {
+      logger.warn('Purchase shopId mismatch', {
+        purchaseId: purchase.id,
+        purchaseShopId: purchase.shopId,
+        sessionShopId: storeId,
+        sessionId: session.id,
+      });
+      throw new ValidationError('Purchase does not belong to this shop');
+    }
+
+    if (purchase.status === 'paid') {
+      logger.warn('Purchase already completed', { purchaseId: purchase.id });
       return { status: 'already_processed' };
     }
 
-    // Update transaction status
-    await prisma.billingTransaction.update({
-      where: { id: transactionId },
-      data: {
-        status: 'completed',
-        stripePaymentId: session.payment_intent,
-      },
-    });
+    // Validate payment amount matches expected amount (fraud prevention)
+    const expectedAmountCents = purchase.priceCents;
+    const actualAmountCents = session.amount_total || 0;
 
-    // Add credits to shop
-    await addCredits(storeId, parseInt(credits), `stripe:${session.id}`, {
-      transactionId,
-      sessionId: session.id,
-      paymentIntent: session.payment_intent,
-    });
+    // Allow small rounding differences (up to 1 cent)
+    if (Math.abs(actualAmountCents - expectedAmountCents) > 1) {
+      logger.error(
+        {
+          shopId: storeId,
+          sessionId: session.id,
+          expectedAmountCents,
+          actualAmountCents,
+          purchaseId: purchase.id,
+        },
+        'Payment amount mismatch - potential fraud or configuration error',
+      );
+      throw new ValidationError(
+        `Payment amount mismatch: expected ${expectedAmountCents} cents, got ${actualAmountCents} cents`,
+      );
+    }
+
+    // Update purchase status and credit wallet atomically (like retail-backend)
+    try {
+      await prisma.$transaction(async tx => {
+        // Update purchase status
+        await tx.purchase.update({
+          where: { id: purchase.id },
+          data: {
+            status: 'paid',
+            stripePaymentIntentId: session.payment_intent || null,
+            stripeCustomerId: session.customer || null,
+            updatedAt: new Date(),
+          },
+        });
+
+        // Credit wallet atomically (pass tx to avoid nested transaction)
+        const { credit } = await import('./wallet.js');
+        await credit(
+          storeId,
+          purchase.units,
+          {
+            reason: `stripe:purchase:${purchase.package.name}`,
+            meta: {
+              purchaseId: purchase.id,
+              packageId: purchase.packageId,
+              stripeSessionId: session.id,
+              stripePaymentIntentId: session.payment_intent,
+              currency: purchase.currency || 'EUR',
+            },
+          },
+          tx,
+        );
+      });
+    } catch (err) {
+      logger.error(
+        {
+          err,
+          purchaseId: purchase.id,
+          shopId: storeId,
+          units: purchase.units,
+        },
+        'Failed to process purchase completion',
+      );
+      throw err; // Re-throw to be caught by webhook handler
+    }
 
     logger.info('Purchase completed successfully', {
       storeId,
-      transactionId,
+      purchaseId: purchase.id,
       creditsAdded: credits,
     });
 
@@ -411,7 +557,10 @@ export async function handleStripeWebhook(stripeEvent) {
   }
 
   // Handle refund events
-  if (stripeEvent.type === 'charge.refunded' || stripeEvent.type === 'payment_intent.refunded') {
+  if (
+    stripeEvent.type === 'charge.refunded' ||
+    stripeEvent.type === 'payment_intent.refunded'
+  ) {
     const refund = stripeEvent.data.object;
     const paymentIntentId = refund.payment_intent || refund.id;
 
@@ -422,34 +571,35 @@ export async function handleStripeWebhook(stripeEvent) {
       currency: refund.currency,
     });
 
-    // Find the original billing transaction by payment intent ID
-    const transaction = await prisma.billingTransaction.findFirst({
+    // Find the original purchase by payment intent ID
+    const purchase = await prisma.purchase.findFirst({
       where: {
-        stripePaymentId: paymentIntentId,
-        status: 'completed',
+        stripePaymentIntentId: paymentIntentId,
+        status: 'paid',
       },
+      include: { package: true },
     });
 
-    if (!transaction) {
-      logger.warn('Transaction not found for refund', {
+    if (!purchase) {
+      logger.warn('Purchase not found for refund', {
         paymentIntentId,
         refundId: refund.id,
       });
       // Don't throw - refund might be for a different system
-      return { status: 'ignored', reason: 'transaction_not_found' };
+      return { status: 'ignored', reason: 'purchase_not_found' };
     }
 
     // Calculate credits to refund (proportional if partial refund)
-    const originalAmount = transaction.amount; // Amount in cents
+    const originalAmount = purchase.priceCents; // Amount in cents
     const refundAmount = refund.amount; // Refund amount in cents
     const creditsToRefund = Math.floor(
-      (transaction.creditsAdded * refundAmount) / originalAmount,
+      (purchase.units * refundAmount) / originalAmount,
     );
 
     // Process refund
     await processRefund(
-      transaction.shopId,
-      transaction.id,
+      purchase.shopId,
+      purchase.id,
       creditsToRefund,
       refund.id,
       {
@@ -462,7 +612,7 @@ export async function handleStripeWebhook(stripeEvent) {
 
     return {
       status: 'success',
-      storeId: transaction.shopId,
+      storeId: purchase.shopId,
       creditsRefunded: creditsToRefund,
     };
   }
@@ -471,7 +621,7 @@ export async function handleStripeWebhook(stripeEvent) {
 }
 
 /**
- * Add credits to store balance
+ * Add credits to store balance using Wallet service
  * @param {string} storeId - Store ID
  * @param {number} credits - Credits to add
  * @param {string} ref - Reference (e.g., 'stripe:session_id')
@@ -485,45 +635,26 @@ export async function addCredits(storeId, credits, ref, meta = {}) {
     throw new ValidationError('Credits must be positive');
   }
 
-  // Use transaction to ensure atomicity
-  const result = await prisma.$transaction(async (tx) => {
-    // Update shop credits
-    const shop = await tx.shop.update({
-      where: { id: storeId },
-      data: {
-        credits: { increment: credits },
-      },
-      select: { credits: true },
-    });
-
-    // Create wallet transaction record
-    await tx.walletTransaction.create({
-      data: {
-        shopId: storeId,
-        type: 'purchase',
-        credits,
-        ref,
-        meta,
-      },
-    });
-
-    return shop;
+  // Use Wallet service instead of directly updating Shop.credits
+  const result = await credit(storeId, credits, {
+    reason: ref,
+    meta,
   });
 
   logger.info('Credits added successfully', {
     storeId,
     creditsAdded: credits,
-    newBalance: result.credits,
+    newBalance: result.balance,
   });
 
   return {
-    credits: result.credits,
+    credits: result.balance,
     added: credits,
   };
 }
 
 /**
- * Deduct credits from store balance
+ * Deduct credits from store balance using Wallet service
  * @param {string} storeId - Store ID
  * @param {number} credits - Credits to deduct
  * @param {string} ref - Reference (e.g., 'campaign:campaign_id')
@@ -537,53 +668,20 @@ export async function deductCredits(storeId, credits, ref, meta = {}) {
     throw new ValidationError('Credits must be positive');
   }
 
-  // Use transaction to ensure atomicity
-  const result = await prisma.$transaction(async (tx) => {
-    // Check current balance
-    const shop = await tx.shop.findUnique({
-      where: { id: storeId },
-      select: { credits: true },
-    });
-
-    if (!shop) {
-      throw new NotFoundError('Shop');
-    }
-
-    if (shop.credits < credits) {
-      throw new ValidationError(`Insufficient credits. Available: ${shop.credits}, Required: ${credits}`);
-    }
-
-    // Update shop credits
-    const updatedShop = await tx.shop.update({
-      where: { id: storeId },
-      data: {
-        credits: { decrement: credits },
-      },
-      select: { credits: true },
-    });
-
-    // Create wallet transaction record
-    await tx.walletTransaction.create({
-      data: {
-        shopId: storeId,
-        type: 'debit',
-        credits: -credits, // Negative for debit
-        ref,
-        meta,
-      },
-    });
-
-    return updatedShop;
+  // Use Wallet service instead of directly updating Shop.credits
+  const result = await debit(storeId, credits, {
+    reason: ref,
+    meta,
   });
 
   logger.info('Credits deducted successfully', {
     storeId,
     creditsDeducted: credits,
-    newBalance: result.credits,
+    newBalance: result.balance,
   });
 
   return {
-    credits: result.credits,
+    credits: result.balance,
     deducted: credits,
   };
 }
@@ -598,7 +696,13 @@ export async function deductCredits(storeId, credits, ref, meta = {}) {
  * @param {Object} meta - Additional metadata
  * @returns {Promise<Object>} Refund result
  */
-export async function processRefund(storeId, transactionId, creditsToRefund = null, refundId = null, meta = {}) {
+export async function processRefund(
+  storeId,
+  transactionId,
+  creditsToRefund = null,
+  refundId = null,
+  meta = {},
+) {
   logger.info('Processing refund', {
     storeId,
     transactionId,
@@ -606,98 +710,138 @@ export async function processRefund(storeId, transactionId, creditsToRefund = nu
     refundId,
   });
 
-  // Find original transaction
-  const transaction = await prisma.billingTransaction.findUnique({
+  // Try to find Purchase first (new model), then fall back to BillingTransaction (legacy)
+  const purchase = await prisma.purchase.findUnique({
     where: { id: transactionId },
   });
 
-  if (!transaction) {
-    logger.error('Transaction not found for refund', { transactionId });
-    throw new NotFoundError('Transaction');
-  }
+  let transaction = null;
+  let credits = creditsToRefund;
 
-  if (transaction.shopId !== storeId) {
-    logger.error('Transaction does not belong to store', {
-      transactionId,
-      storeId,
-      transactionShopId: transaction.shopId,
+  if (purchase) {
+    // Using Purchase model
+    if (purchase.shopId !== storeId) {
+      logger.error('Purchase does not belong to store', {
+        transactionId,
+        storeId,
+        purchaseShopId: purchase.shopId,
+      });
+      throw new ValidationError('Purchase does not belong to this store');
+    }
+
+    if (purchase.status !== 'paid') {
+      logger.error('Cannot refund non-paid purchase', {
+        transactionId,
+        status: purchase.status,
+      });
+      throw new ValidationError('Can only refund paid purchases');
+    }
+
+    credits = creditsToRefund || purchase.units;
+  } else {
+    // Fallback to BillingTransaction (legacy)
+    transaction = await prisma.billingTransaction.findUnique({
+      where: { id: transactionId },
     });
-    throw new ValidationError('Transaction does not belong to this store');
-  }
 
-  if (transaction.status !== 'completed') {
-    logger.error('Cannot refund non-completed transaction', {
-      transactionId,
-      status: transaction.status,
-    });
-    throw new ValidationError('Can only refund completed transactions');
-  }
+    if (!transaction) {
+      logger.error('Transaction not found for refund', { transactionId });
+      throw new NotFoundError('Transaction');
+    }
 
-  // Use original credits if not specified
-  const credits = creditsToRefund || transaction.creditsAdded;
+    if (transaction.shopId !== storeId) {
+      logger.error('Transaction does not belong to store', {
+        transactionId,
+        storeId,
+        transactionShopId: transaction.shopId,
+      });
+      throw new ValidationError('Transaction does not belong to this store');
+    }
+
+    if (transaction.status !== 'completed') {
+      logger.error('Cannot refund non-completed transaction', {
+        transactionId,
+        status: transaction.status,
+      });
+      throw new ValidationError('Can only refund completed transactions');
+    }
+
+    credits = creditsToRefund || transaction.creditsAdded;
+  }
 
   if (credits <= 0) {
     throw new ValidationError('Refund credits must be positive');
   }
 
-  // Use atomic transaction for refund processing
-  const result = await prisma.$transaction(async (tx) => {
-    // Check current balance
-    const shop = await tx.shop.findUnique({
-      where: { id: storeId },
-      select: { credits: true },
-    });
-
-    if (!shop) {
-      throw new NotFoundError('Shop');
-    }
-
-    // Deduct credits (allow negative balance for refunds if needed)
-    const updatedShop = await tx.shop.update({
-      where: { id: storeId },
-      data: {
-        credits: { decrement: credits },
-      },
-      select: { credits: true },
-    });
-
-    // Create wallet transaction record for refund
-    await tx.walletTransaction.create({
-      data: {
-        shopId: storeId,
-        type: 'refund',
-        credits: -credits, // Negative for refund
-        ref: refundId ? `stripe:refund:${refundId}` : `refund:${transactionId}`,
-        meta: {
-          originalTransactionId: transactionId,
-          refundId,
-          ...meta,
-        },
-      },
-    });
-
-    // Update billing transaction status to refunded (or create a refund record)
-    // For now, we'll mark it as refunded in metadata
-    await tx.billingTransaction.update({
-      where: { id: transactionId },
-      data: {
-        // Keep status as completed but add refund info in a note
-        // Alternatively, you could add a refundedAt field
-      },
-    });
-
-    return updatedShop;
+  // Use Wallet service for refund
+  const result = await refundCredits(storeId, credits, {
+    reason: refundId ? `stripe:refund:${refundId}` : `refund:${transactionId}`,
+    meta: {
+      originalTransactionId: transactionId,
+      refundId,
+      ...meta,
+    },
   });
+
+  // Update Purchase or BillingTransaction status
+  if (purchase) {
+    await prisma.purchase.update({
+      where: { id: purchase.id },
+      data: { status: 'refunded' },
+    });
+    logger.info(
+      {
+        shopId: storeId,
+        purchaseId: purchase.id,
+      },
+      'Purchase status updated to refunded',
+    );
+  } else if (transaction) {
+    // Legacy: Update BillingTransaction (keep for backward compatibility)
+    // Note: BillingTransaction doesn't have a refunded status, so we'll just log it
+    logger.info(
+      {
+        shopId: storeId,
+        transactionId: transaction.id,
+      },
+      'Legacy BillingTransaction refunded (status not updated)',
+    );
+  } else {
+    // Fallback: Try to find Purchase by stripePaymentIntentId
+    if (meta.paymentIntentId) {
+      const purchaseByPayment = await prisma.purchase.findFirst({
+        where: {
+          shopId: storeId,
+          stripePaymentIntentId: meta.paymentIntentId,
+          status: 'paid',
+        },
+      });
+
+      if (purchaseByPayment) {
+        await prisma.purchase.update({
+          where: { id: purchaseByPayment.id },
+          data: { status: 'refunded' },
+        });
+        logger.info(
+          {
+            shopId: storeId,
+            purchaseId: purchaseByPayment.id,
+          },
+          'Purchase found by payment intent and updated to refunded',
+        );
+      }
+    }
+  }
 
   logger.info('Refund processed successfully', {
     storeId,
     transactionId,
     creditsRefunded: credits,
-    newBalance: result.credits,
+    newBalance: result.balance,
   });
 
   return {
-    credits: result.credits,
+    credits: result.balance,
     refunded: credits,
     transactionId,
   };
@@ -710,19 +854,16 @@ export async function processRefund(storeId, transactionId, creditsToRefund = nu
  * @returns {Promise<Object>} Transaction history
  */
 export async function getTransactionHistory(storeId, filters = {}) {
-  const {
-    page = 1,
-    pageSize = 20,
-    type,
-    startDate,
-    endDate,
-  } = filters;
+  const { page = 1, pageSize = 20, type, startDate, endDate } = filters;
 
   logger.info('Getting transaction history', { storeId, filters });
 
   const where = { shopId: storeId };
 
-  if (type && ['purchase', 'debit', 'credit', 'refund', 'adjustment'].includes(type)) {
+  if (
+    type &&
+    ['purchase', 'debit', 'credit', 'refund', 'adjustment'].includes(type)
+  ) {
     where.type = type;
   }
 
@@ -744,7 +885,11 @@ export async function getTransactionHistory(storeId, filters = {}) {
 
   const totalPages = Math.ceil(total / parseInt(pageSize));
 
-  logger.info('Transaction history retrieved', { storeId, total, returned: transactions.length });
+  logger.info('Transaction history retrieved', {
+    storeId,
+    total,
+    returned: transactions.length,
+  });
 
   return {
     transactions,
@@ -766,11 +911,7 @@ export async function getTransactionHistory(storeId, filters = {}) {
  * @returns {Promise<Object>} Billing history
  */
 export async function getBillingHistory(storeId, filters = {}) {
-  const {
-    page = 1,
-    pageSize = 20,
-    status,
-  } = filters;
+  const { page = 1, pageSize = 20, status } = filters;
 
   logger.info('Getting billing history', { storeId, filters });
 
@@ -792,46 +933,63 @@ export async function getBillingHistory(storeId, filters = {}) {
 
   const totalPages = Math.ceil(total / parseInt(pageSize));
 
-  logger.info('Billing history retrieved', { storeId, total, returned: transactions.length });
+  logger.info('Billing history retrieved', {
+    storeId,
+    total,
+    returned: transactions.length,
+  });
 
   // Transform transactions to include frontend-friendly fields
-  const transformedTransactions = transactions.map(transaction => {
-    // Get package info from packageType
-    let packageName = 'N/A';
-    let packageCredits = transaction.creditsAdded;
+  // Use Promise.all to handle async package lookups
+  const transformedTransactions = await Promise.all(
+    transactions.map(async transaction => {
+      // Get package info from packageType
+      let packageName = 'N/A';
+      let packageCredits = transaction.creditsAdded;
 
-    try {
-      const pkg = getPackageById(transaction.packageType);
-      packageName = pkg.name;
-      packageCredits = pkg.credits;
-    } catch (error) {
-      // Package not found, use defaults
-      packageName = transaction.packageType || 'N/A';
-    }
+      try {
+        // Try to find package by ID (packageType might be package ID or legacy string)
+        const pkg = await prisma.package.findUnique({
+          where: { id: transaction.packageType },
+        });
+        if (pkg) {
+          packageName = pkg.name;
+          packageCredits = pkg.units;
+        } else {
+          // Fallback: use packageType as name
+          packageName = transaction.packageType || 'N/A';
+        }
+      } catch (error) {
+        // Package not found, use defaults
+        packageName = transaction.packageType || 'N/A';
+      }
 
-    // Convert amount from cents to currency
-    const amountInCurrency = transaction.amount ? (transaction.amount / 100).toFixed(2) : 0;
+      // Convert amount from cents to currency
+      const amountInCurrency = transaction.amount
+        ? (transaction.amount / 100).toFixed(2)
+        : 0;
 
-    return {
-      id: transaction.id,
-      packageName,
-      credits: transaction.creditsAdded,
-      creditsAdded: transaction.creditsAdded, // Keep for backward compatibility
-      amount: parseFloat(amountInCurrency), // Amount in currency (not cents)
-      amountCents: transaction.amount, // Keep original in cents for reference
-      price: parseFloat(amountInCurrency), // Alias for amount
-      currency: transaction.currency || 'EUR',
-      status: transaction.status,
-      packageType: transaction.packageType,
-      createdAt: transaction.createdAt,
-      updatedAt: transaction.updatedAt,
-      // Include package info for backward compatibility
-      package: {
-        name: packageName,
-        credits: packageCredits,
-      },
-    };
-  });
+      return {
+        id: transaction.id,
+        packageName,
+        credits: transaction.creditsAdded,
+        creditsAdded: transaction.creditsAdded, // Keep for backward compatibility
+        amount: parseFloat(amountInCurrency), // Amount in currency (not cents)
+        amountCents: transaction.amount, // Keep original in cents for reference
+        price: parseFloat(amountInCurrency), // Alias for amount
+        currency: transaction.currency || 'EUR',
+        status: transaction.status,
+        packageType: transaction.packageType,
+        createdAt: transaction.createdAt,
+        updatedAt: transaction.updatedAt,
+        // Include package info for backward compatibility
+        package: {
+          name: packageName,
+          credits: packageCredits,
+        },
+      };
+    }),
+  );
 
   return {
     transactions: transformedTransactions,
@@ -857,4 +1015,3 @@ export default {
   getTransactionHistory,
   getBillingHistory,
 };
-

@@ -17,7 +17,10 @@ export async function registerAutomationWebhooks(shopDomain) {
       throw new Error('Shop access token not available');
     }
 
-    const baseUrl = process.env.HOST || process.env.WEBHOOK_BASE_URL || 'https://astronote-shopify-backend.onrender.com';
+    const baseUrl =
+      process.env.HOST ||
+      process.env.WEBHOOK_BASE_URL ||
+      'https://astronote-shopify-backend.onrender.com';
     const webhookBaseUrl = `${baseUrl}/automation-webhooks`;
 
     // Webhooks to register
@@ -45,20 +48,23 @@ export async function registerAutomationWebhooks(shopDomain) {
     // Register each webhook using Shopify REST Admin API
     for (const webhook of webhooksToRegister) {
       try {
-        const response = await fetch(`https://${shopDomain}/admin/api/2024-04/webhooks.json`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Shopify-Access-Token': shop.accessToken,
-          },
-          body: JSON.stringify({
-            webhook: {
-              topic: webhook.topic,
-              address: webhook.address,
-              format: webhook.format,
+        const response = await fetch(
+          `https://${shopDomain}/admin/api/2024-04/webhooks.json`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Shopify-Access-Token': shop.accessToken,
             },
-          }),
-        });
+            body: JSON.stringify({
+              webhook: {
+                topic: webhook.topic,
+                address: webhook.address,
+                format: webhook.format,
+              },
+            }),
+          },
+        );
 
         if (!response.ok) {
           const errorText = await response.text();
@@ -138,12 +144,15 @@ export async function listWebhooks(shopDomain) {
       throw new Error('Shop access token not available');
     }
 
-    const response = await fetch(`https://${shopDomain}/admin/api/2024-04/webhooks.json`, {
-      method: 'GET',
-      headers: {
-        'X-Shopify-Access-Token': shop.accessToken,
+    const response = await fetch(
+      `https://${shopDomain}/admin/api/2024-04/webhooks.json`,
+      {
+        method: 'GET',
+        headers: {
+          'X-Shopify-Access-Token': shop.accessToken,
+        },
       },
-    });
+    );
 
     if (!response.ok) {
       throw new Error(`Failed to list webhooks: ${response.status}`);
@@ -177,12 +186,15 @@ export async function deleteWebhook(shopDomain, webhookId) {
       throw new Error('Shop access token not available');
     }
 
-    const response = await fetch(`https://${shopDomain}/admin/api/2024-04/webhooks/${webhookId}.json`, {
-      method: 'DELETE',
-      headers: {
-        'X-Shopify-Access-Token': shop.accessToken,
+    const response = await fetch(
+      `https://${shopDomain}/admin/api/2024-04/webhooks/${webhookId}.json`,
+      {
+        method: 'DELETE',
+        headers: {
+          'X-Shopify-Access-Token': shop.accessToken,
+        },
       },
-    });
+    );
 
     if (!response.ok) {
       throw new Error(`Failed to delete webhook: ${response.status}`);
@@ -207,4 +219,3 @@ export default {
   listWebhooks,
   deleteWebhook,
 };
-

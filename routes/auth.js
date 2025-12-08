@@ -37,11 +37,15 @@ r.post('/shopify-token', async (req, res, next) => {
       storeId: store.id,
     });
 
-    return sendSuccess(res, {
-      token,
-      store,
-      expiresIn: '30d',
-    }, 'Token generated successfully');
+    return sendSuccess(
+      res,
+      {
+        token,
+        store,
+        expiresIn: '30d',
+      },
+      'Token generated successfully',
+    );
   } catch (error) {
     logger.error('Token exchange error', {
       error: error.message,
@@ -83,19 +87,27 @@ r.get('/shopify', async (req, res, next) => {
     }
 
     // Build callback URL
-    const hostName = HOST?.replace(/^https?:\/\//, '').split('/')[0] || 'astronote-shopify-backend.onrender.com';
+    const hostName =
+      HOST?.replace(/^https?:\/\//, '').split('/')[0] ||
+      'astronote-shopify-backend.onrender.com';
     const protocol = HOST?.startsWith('https') ? 'https' : 'http';
     const callbackUrl = `${protocol}://${hostName}/auth/callback`;
 
     // Build scopes
-    const scopes = (process.env.SCOPES || 'read_products,read_customers,read_orders,write_discounts').split(',').join(',');
+    const scopes = (
+      process.env.SCOPES ||
+      'read_products,read_customers,read_orders,write_discounts'
+    )
+      .split(',')
+      .join(',');
 
     // Generate state for security (optional but recommended)
     const state = crypto.randomBytes(16).toString('hex');
 
     // Build Shopify OAuth URL
     const encodedRedirectUri = encodeURIComponent(callbackUrl);
-    const authUrl = `https://${shopDomain}/admin/oauth/authorize?` +
+    const authUrl =
+      `https://${shopDomain}/admin/oauth/authorize?` +
       `client_id=${SHOPIFY_API_KEY}&` +
       `scope=${encodeURIComponent(scopes)}&` +
       `redirect_uri=${encodedRedirectUri}&` +
@@ -171,17 +183,20 @@ r.get('/callback', async (req, res, _next) => {
     }
 
     // Exchange authorization code for access token
-    const tokenResponse = await fetch(`https://${shop}/admin/oauth/access_token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    const tokenResponse = await fetch(
+      `https://${shop}/admin/oauth/access_token`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          client_id: SHOPIFY_API_KEY,
+          client_secret: SHOPIFY_API_SECRET,
+          code,
+        }),
       },
-      body: JSON.stringify({
-        client_id: SHOPIFY_API_KEY,
-        client_secret: SHOPIFY_API_SECRET,
-        code,
-      }),
-    });
+    );
 
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text();
@@ -203,7 +218,9 @@ r.get('/callback', async (req, res, _next) => {
 
     // Register automation webhooks after successful OAuth
     try {
-      const { registerAutomationWebhooks } = await import('../services/webhook-registration.js');
+      const { registerAutomationWebhooks } = await import(
+        '../services/webhook-registration.js'
+      );
       const webhookResult = await registerAutomationWebhooks(shopDomain);
       logger.info('Webhook registration completed', {
         shopDomain,
@@ -234,10 +251,13 @@ r.get('/callback', async (req, res, _next) => {
         retries--;
 
         // Check if it's a connection error
-        if (dbError.message?.includes('closed') ||
-            dbError.message?.includes('connection') ||
-            dbError.code === 'P1001' || // Prisma connection error
-            dbError.code === 'P1017') { // Server closed connection
+        if (
+          dbError.message?.includes('closed') ||
+          dbError.message?.includes('connection') ||
+          dbError.code === 'P1001' || // Prisma connection error
+          dbError.code === 'P1017'
+        ) {
+          // Server closed connection
 
           logger.warn('Database connection error, retrying...', {
             shopDomain,
@@ -247,7 +267,9 @@ r.get('/callback', async (req, res, _next) => {
 
           if (retries > 0) {
             // Wait before retrying (exponential backoff)
-            await new Promise(resolve => setTimeout(resolve, 1000 * (4 - retries)));
+            await new Promise(resolve =>
+              setTimeout(resolve, 1000 * (4 - retries)),
+            );
             continue;
           }
         }
@@ -297,18 +319,25 @@ r.get('/callback', async (req, res, _next) => {
           lastError = dbError;
           retries--;
 
-          if ((dbError.message?.includes('closed') ||
-               dbError.message?.includes('connection') ||
-               dbError.code === 'P1001' ||
-               dbError.code === 'P1017') && retries > 0) {
+          if (
+            (dbError.message?.includes('closed') ||
+              dbError.message?.includes('connection') ||
+              dbError.code === 'P1001' ||
+              dbError.code === 'P1017') &&
+            retries > 0
+          ) {
+            logger.warn(
+              'Database connection error during store creation, retrying...',
+              {
+                shopDomain,
+                retriesLeft: retries,
+                error: dbError.message,
+              },
+            );
 
-            logger.warn('Database connection error during store creation, retrying...', {
-              shopDomain,
-              retriesLeft: retries,
-              error: dbError.message,
-            });
-
-            await new Promise(resolve => setTimeout(resolve, 1000 * (4 - retries)));
+            await new Promise(resolve =>
+              setTimeout(resolve, 1000 * (4 - retries)),
+            );
             continue;
           }
 
@@ -341,18 +370,25 @@ r.get('/callback', async (req, res, _next) => {
           lastError = dbError;
           retries--;
 
-          if ((dbError.message?.includes('closed') ||
-               dbError.message?.includes('connection') ||
-               dbError.code === 'P1001' ||
-               dbError.code === 'P1017') && retries > 0) {
+          if (
+            (dbError.message?.includes('closed') ||
+              dbError.message?.includes('connection') ||
+              dbError.code === 'P1001' ||
+              dbError.code === 'P1017') &&
+            retries > 0
+          ) {
+            logger.warn(
+              'Database connection error during token update, retrying...',
+              {
+                shopDomain,
+                retriesLeft: retries,
+                error: dbError.message,
+              },
+            );
 
-            logger.warn('Database connection error during token update, retrying...', {
-              shopDomain,
-              retriesLeft: retries,
-              error: dbError.message,
-            });
-
-            await new Promise(resolve => setTimeout(resolve, 1000 * (4 - retries)));
+            await new Promise(resolve =>
+              setTimeout(resolve, 1000 * (4 - retries)),
+            );
             continue;
           }
 
@@ -374,7 +410,9 @@ r.get('/callback', async (req, res, _next) => {
     });
 
     // Redirect to web app with token
-    const webAppUrl = process.env.WEB_APP_URL || 'https://astronote-shopify-frontend.onrender.com';
+    const webAppUrl =
+      process.env.WEB_APP_URL ||
+      'https://astronote-shopify-frontend.onrender.com';
     const redirectUrl = `${webAppUrl}/shopify/auth/callback?token=${token}`;
 
     res.redirect(redirectUrl);
@@ -390,18 +428,25 @@ r.get('/callback', async (req, res, _next) => {
     let userMessage = error.message;
 
     // Handle specific database connection errors
-    if (error.message?.includes('closed') ||
-        error.message?.includes('connection') ||
-        error.code === 'P1001' ||
-        error.code === 'P1017') {
+    if (
+      error.message?.includes('closed') ||
+      error.message?.includes('connection') ||
+      error.code === 'P1001' ||
+      error.code === 'P1017'
+    ) {
       userMessage = 'Database connection error. Please try again in a moment.';
     } else if (error.message?.includes('Store not found')) {
-      userMessage = 'Store not found. Please ensure your Shopify store is properly configured.';
+      userMessage =
+        'Store not found. Please ensure your Shopify store is properly configured.';
     }
 
     // Redirect to web app with error
-    const webAppUrl = process.env.WEB_APP_URL || 'https://astronote-shopify-frontend.onrender.com';
-    res.redirect(`${webAppUrl}/shopify/login?error=${encodeURIComponent(userMessage)}`);
+    const webAppUrl =
+      process.env.WEB_APP_URL ||
+      'https://astronote-shopify-frontend.onrender.com';
+    res.redirect(
+      `${webAppUrl}/shopify/login?error=${encodeURIComponent(userMessage)}`,
+    );
   }
 });
 
@@ -465,7 +510,6 @@ r.get('/verify', async (req, res, _next) => {
   }
 });
 
-
 /**
  * POST /auth/refresh
  * Refresh app JWT token (optional - for future use)
@@ -524,10 +568,14 @@ r.post('/refresh', async (req, res, next) => {
       shopDomain: store.shopDomain,
     });
 
-    return sendSuccess(res, {
-      token: newToken,
-      expiresIn: '30d',
-    }, 'Token refreshed successfully');
+    return sendSuccess(
+      res,
+      {
+        token: newToken,
+        expiresIn: '30d',
+      },
+      'Token refreshed successfully',
+    );
   } catch (error) {
     logger.error('Token refresh error', {
       error: error.message,
@@ -537,4 +585,3 @@ r.post('/refresh', async (req, res, next) => {
 });
 
 export default r;
-

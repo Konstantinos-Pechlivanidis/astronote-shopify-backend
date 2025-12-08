@@ -20,7 +20,10 @@ r.get('/health/config', (req, res) =>
     ok: true,
     shopify: shopifyDiag(),
     redis: !!process.env.REDIS_URL,
-    mitto: { base: process.env.MITTO_API_BASE || '', hasKey: !!process.env.MITTO_API_KEY },
+    mitto: {
+      base: process.env.MITTO_API_BASE || '',
+      hasKey: !!process.env.MITTO_API_KEY,
+    },
   }),
 );
 
@@ -88,7 +91,10 @@ r.get('/health/full', async (req, res) => {
     );
     await j.remove();
     const queueDuration = Date.now() - queueStart;
-    out.checks.queue = { status: 'healthy', responseTime: `${queueDuration}ms` };
+    out.checks.queue = {
+      status: 'healthy',
+      responseTime: `${queueDuration}ms`,
+    };
   } catch (e) {
     out.checks.queue = { status: 'unhealthy', error: String(e.message) };
     out.ok = false;
@@ -102,9 +108,15 @@ r.get('/health/full', async (req, res) => {
     if (base) {
       await axios.get(base, { timeout: 5000 }).catch(() => ({}));
       const mittoDuration = Date.now() - mittoStart;
-      out.checks.mitto = { status: 'healthy', responseTime: `${mittoDuration}ms` };
+      out.checks.mitto = {
+        status: 'healthy',
+        responseTime: `${mittoDuration}ms`,
+      };
     } else {
-      out.checks.mitto = { status: 'not_configured', message: 'No MITTO_API_BASE set' };
+      out.checks.mitto = {
+        status: 'not_configured',
+        message: 'No MITTO_API_BASE set',
+      };
     }
   } catch (e) {
     out.checks.mitto = { status: 'unhealthy', error: String(e.message) };
@@ -175,7 +187,8 @@ r.get('/whoami', async (req, res) => {
   return res.status(401).json({
     success: false,
     error: 'Store context required',
-    message: 'This endpoint requires store context. Please ensure you are properly authenticated.',
+    message:
+      'This endpoint requires store context. Please ensure you are properly authenticated.',
   });
 });
 

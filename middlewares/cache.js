@@ -60,8 +60,11 @@ export function cacheMiddleware(prefix, ttl = CACHE_TTL.MEDIUM) {
       res.json = function (data) {
         // Only cache successful responses
         if (res.statusCode >= 200 && res.statusCode < 300) {
-          cacheManager.set(cacheKey, data, ttl).catch((err) => {
-            logger.error('Cache set error', { error: err.message, key: cacheKey });
+          cacheManager.set(cacheKey, data, ttl).catch(err => {
+            logger.error('Cache set error', {
+              error: err.message,
+              key: cacheKey,
+            });
           });
         }
 
@@ -89,7 +92,11 @@ export async function invalidateStoreCache(storeId, pattern) {
     await cacheManager.clearPattern(cachePattern);
     logger.info('Cache invalidated', { storeId, pattern: cachePattern });
   } catch (error) {
-    logger.error('Cache invalidation error', { error: error.message, storeId, pattern });
+    logger.error('Cache invalidation error', {
+      error: error.message,
+      storeId,
+      pattern,
+    });
   }
 }
 
@@ -107,16 +114,25 @@ export function invalidateCacheMiddleware(patterns = []) {
     // Override json method to invalidate cache after response
     res.json = function (data) {
       // Only invalidate on successful write operations
-      if (res.statusCode >= 200 && res.statusCode < 300 && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) {
+      if (
+        res.statusCode >= 200 &&
+        res.statusCode < 300 &&
+        ['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)
+      ) {
         try {
           const storeId = getStoreId(req);
           patterns.forEach(pattern => {
             invalidateStoreCache(storeId, pattern).catch(err => {
-              logger.error('Cache invalidation error', { error: err.message, pattern });
+              logger.error('Cache invalidation error', {
+                error: err.message,
+                pattern,
+              });
             });
           });
         } catch (error) {
-          logger.error('Cache invalidation middleware error', { error: error.message });
+          logger.error('Cache invalidation middleware error', {
+            error: error.message,
+          });
         }
       }
 
@@ -135,22 +151,40 @@ export function invalidateCacheMiddleware(patterns = []) {
 export const dashboardCache = cacheMiddleware('dashboard', CACHE_TTL.MEDIUM);
 
 // Contacts list cache (2 minutes)
-export const contactsListCache = cacheMiddleware('contacts:list', CACHE_TTL.SHORT * 2);
+export const contactsListCache = cacheMiddleware(
+  'contacts:list',
+  CACHE_TTL.SHORT * 2,
+);
 
 // Contact stats cache (5 minutes)
-export const contactsStatsCache = cacheMiddleware('contacts:stats', CACHE_TTL.MEDIUM);
+export const contactsStatsCache = cacheMiddleware(
+  'contacts:stats',
+  CACHE_TTL.MEDIUM,
+);
 
 // Campaigns list cache (2 minutes)
-export const campaignsListCache = cacheMiddleware('campaigns:list', CACHE_TTL.SHORT * 2);
+export const campaignsListCache = cacheMiddleware(
+  'campaigns:list',
+  CACHE_TTL.SHORT * 2,
+);
 
 // Campaign metrics cache (1 minute)
-export const campaignMetricsCache = cacheMiddleware('campaigns:metrics', CACHE_TTL.SHORT);
+export const campaignMetricsCache = cacheMiddleware(
+  'campaigns:metrics',
+  CACHE_TTL.SHORT,
+);
 
 // Billing balance cache (30 seconds)
-export const billingBalanceCache = cacheMiddleware('billing:balance', CACHE_TTL.SHORT / 2);
+export const billingBalanceCache = cacheMiddleware(
+  'billing:balance',
+  CACHE_TTL.SHORT / 2,
+);
 
 // Billing history cache (5 minutes)
-export const billingHistoryCache = cacheMiddleware('billing:history', CACHE_TTL.MEDIUM);
+export const billingHistoryCache = cacheMiddleware(
+  'billing:history',
+  CACHE_TTL.MEDIUM,
+);
 
 // Reports cache (15 minutes)
 export const reportsCache = cacheMiddleware('reports', CACHE_TTL.LONG);
@@ -196,4 +230,3 @@ export default {
   invalidateCampaignsCache,
   invalidateBillingCache,
 };
-

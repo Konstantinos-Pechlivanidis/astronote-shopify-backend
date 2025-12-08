@@ -29,7 +29,9 @@ export async function handleCampaignSend(job) {
     }
 
     if (campaign.shopId !== storeId) {
-      throw new Error(`Campaign ${campaignId} does not belong to store ${storeId}`);
+      throw new Error(
+        `Campaign ${campaignId} does not belong to store ${storeId}`,
+      );
     }
 
     // Campaign should be in 'sending' status (set by scheduler) or 'scheduled' (if retrying)
@@ -38,7 +40,11 @@ export async function handleCampaignSend(job) {
         campaignId,
         status: campaign.status,
       });
-      return { status: 'skipped', reason: 'invalid_status', campaignStatus: campaign.status };
+      return {
+        status: 'skipped',
+        reason: 'invalid_status',
+        campaignStatus: campaign.status,
+      };
     }
 
     const result = await sendCampaign(storeId, campaignId);
@@ -68,7 +74,9 @@ export async function handleCampaignSend(job) {
         where: { id: campaignId },
         data: { status: 'scheduled' },
       });
-      logger.info('Reverted campaign status to scheduled after failure', { campaignId });
+      logger.info('Reverted campaign status to scheduled after failure', {
+        campaignId,
+      });
     } catch (revertError) {
       logger.error('Failed to revert campaign status after send failure', {
         campaignId,
@@ -79,4 +87,3 @@ export async function handleCampaignSend(job) {
     throw error;
   }
 }
-

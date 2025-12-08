@@ -1,8 +1,17 @@
 import { logger } from '../utils/logger.js';
 import prisma from '../services/prisma.js';
-import { queryEvents, getCustomerFromEvent, getOrderFromEvent, getFulfillmentFromEvent } from '../services/shopify-events.js';
+import {
+  queryEvents,
+  getCustomerFromEvent,
+  getOrderFromEvent,
+  getFulfillmentFromEvent,
+} from '../services/shopify-events.js';
 import { shouldTriggerAutomation } from '../services/event-automation-mapper.js';
-import { getMinOccurredAt, isEventProcessed, batchMarkEventsProcessed } from '../services/event-deduplication.js';
+import {
+  getMinOccurredAt,
+  isEventProcessed,
+  batchMarkEventsProcessed,
+} from '../services/event-deduplication.js';
 import { automationQueue } from '../queue/index.js';
 import { getExpectedEventForAutomation } from '../services/event-automation-mapper.js';
 
@@ -42,7 +51,9 @@ async function processShopEvents(shop) {
     }
 
     // Get automation types we need to monitor
-    const automationTypes = activeAutomations.map(ua => ua.automation.triggerEvent);
+    const automationTypes = activeAutomations.map(
+      ua => ua.automation.triggerEvent,
+    );
     const uniqueAutomationTypes = [...new Set(automationTypes)];
 
     // Process each automation type
@@ -59,7 +70,11 @@ async function processShopEvents(shop) {
         }
 
         // Get minimum occurredAt timestamp
-        const minOccurredAt = await getMinOccurredAt(shop.id, automationType, 10);
+        const minOccurredAt = await getMinOccurredAt(
+          shop.id,
+          automationType,
+          10,
+        );
         const maxOccurredAt = new Date();
 
         // Query events from Shopify
@@ -87,7 +102,11 @@ async function processShopEvents(shop) {
         for (const event of events) {
           try {
             // Check if event already processed
-            const alreadyProcessed = await isEventProcessed(event.id, shop.id, automationType);
+            const alreadyProcessed = await isEventProcessed(
+              event.id,
+              shop.id,
+              automationType,
+            );
             if (alreadyProcessed) {
               logger.debug('Event already processed, skipping', {
                 eventId: event.id,
@@ -100,7 +119,10 @@ async function processShopEvents(shop) {
             // Get event data based on subject type
             const eventData = {};
             if (event.subjectType === 'CUSTOMER') {
-              const customer = await getCustomerFromEvent(shop.shopDomain, event);
+              const customer = await getCustomerFromEvent(
+                shop.shopDomain,
+                event,
+              );
               if (customer) {
                 eventData.customer = customer;
               }
@@ -110,7 +132,10 @@ async function processShopEvents(shop) {
                 eventData.order = order;
               }
             } else if (event.subjectType === 'FULFILLMENT') {
-              const fulfillment = await getFulfillmentFromEvent(shop.shopDomain, event);
+              const fulfillment = await getFulfillmentFromEvent(
+                shop.shopDomain,
+                event,
+              );
               if (fulfillment) {
                 eventData.fulfillment = fulfillment;
               }
@@ -162,7 +187,9 @@ async function processShopEvents(shop) {
                     firstName: eventData.customer.firstName || null,
                     lastName: eventData.customer.lastName || null,
                     phoneE164: eventData.customer.phone || null,
-                    smsConsent: eventData.customer.hasSmsConsent ? 'opted_in' : 'unknown',
+                    smsConsent: eventData.customer.hasSmsConsent
+                      ? 'opted_in'
+                      : 'unknown',
                   },
                 });
                 logger.info('Contact created from event', {
@@ -176,7 +203,10 @@ async function processShopEvents(shop) {
                 contactId = contact.id;
 
                 // Update SMS consent if changed
-                if (eventData.customer.hasSmsConsent && contact.smsConsent !== 'opted_in') {
+                if (
+                  eventData.customer.hasSmsConsent &&
+                  contact.smsConsent !== 'opted_in'
+                ) {
                   await prisma.contact.update({
                     where: { id: contact.id },
                     data: { smsConsent: 'opted_in' },
@@ -208,7 +238,11 @@ async function processShopEvents(shop) {
               if (contact) {
                 contactId = contact.id;
               }
-            } else if (eventData.fulfillment && eventData.fulfillment.order && eventData.fulfillment.order.customer) {
+            } else if (
+              eventData.fulfillment &&
+              eventData.fulfillment.order &&
+              eventData.fulfillment.order.customer
+            ) {
               // Find contact by fulfillment order customer email
               let contact = await prisma.contact.findFirst({
                 where: {
@@ -222,9 +256,12 @@ async function processShopEvents(shop) {
                   data: {
                     shopId: shop.id,
                     email: eventData.fulfillment.order.customer.email,
-                    firstName: eventData.fulfillment.order.customer.firstName || null,
-                    lastName: eventData.fulfillment.order.customer.lastName || null,
-                    phoneE164: eventData.fulfillment.order.customer.phone || null,
+                    firstName:
+                      eventData.fulfillment.order.customer.firstName || null,
+                    lastName:
+                      eventData.fulfillment.order.customer.lastName || null,
+                    phoneE164:
+                      eventData.fulfillment.order.customer.phone || null,
                     smsConsent: 'unknown',
                   },
                 });
@@ -257,7 +294,8 @@ async function processShopEvents(shop) {
                 ...baseJobData,
                 welcomeData: {
                   customerEmail: eventData.customer?.email,
-                  customerName: `${eventData.customer?.firstName || ''} ${eventData.customer?.lastName || ''}`.trim(),
+                  customerName:
+                    `${eventData.customer?.firstName || ''} ${eventData.customer?.lastName || ''}`.trim(),
                 },
               };
             } else if (automationType === 'order_placed') {
@@ -293,23 +331,23 @@ async function processShopEvents(shop) {
             }
 
             // Queue automation job
-            const jobName = automationType === 'order_placed' ? 'order-confirmation'
-              : automationType === 'order_fulfilled' ? 'order-fulfilled'
-                : automationType === 'welcome' ? 'welcome'
-                  : automationType;
+            const jobName =
+              automationType === 'order_placed'
+                ? 'order-confirmation'
+                : automationType === 'order_fulfilled'
+                  ? 'order-fulfilled'
+                  : automationType === 'welcome'
+                    ? 'welcome'
+                    : automationType;
 
-            await automationQueue.add(
-              jobName,
-              jobData,
-              {
-                jobId: `${automationType}-${shop.id}-${event.id}-${Date.now()}`,
-                attempts: 3,
-                backoff: {
-                  type: 'exponential',
-                  delay: 2000,
-                },
+            await automationQueue.add(jobName, jobData, {
+              jobId: `${automationType}-${shop.id}-${event.id}-${Date.now()}`,
+              attempts: 3,
+              backoff: {
+                type: 'exponential',
+                delay: 2000,
               },
-            );
+            });
 
             processedEvents.push({
               id: event.id,
@@ -345,7 +383,11 @@ async function processShopEvents(shop) {
 
         // Batch mark events as processed
         if (processedEvents.length > 0) {
-          await batchMarkEventsProcessed(processedEvents, shop.id, automationType);
+          await batchMarkEventsProcessed(
+            processedEvents,
+            shop.id,
+            automationType,
+          );
         }
       } catch (automationTypeError) {
         results.errors++;
@@ -469,7 +511,10 @@ export function startEventPoller() {
   }
 
   // Polling interval (default: 5 minutes)
-  const intervalMinutes = parseInt(process.env.EVENT_POLLING_INTERVAL || '5', 10);
+  const intervalMinutes = parseInt(
+    process.env.EVENT_POLLING_INTERVAL || '5',
+    10,
+  );
   const INTERVAL_MS = intervalMinutes * 60 * 1000;
 
   // Initial delay of 1 minute to let the app fully start
@@ -480,12 +525,15 @@ export function startEventPoller() {
   function processNextPoll() {
     try {
       processAllShopEvents()
-        .then((result) => {
-          if (result.totalEventsProcessed > 0 || result.totalAutomationsQueued > 0) {
+        .then(result => {
+          if (
+            result.totalEventsProcessed > 0 ||
+            result.totalAutomationsQueued > 0
+          ) {
             logger.info('Event polling completed', result);
           }
         })
-        .catch((error) => {
+        .catch(error => {
           logger.error('Error in event poller', {
             error: error.message,
           });
@@ -513,4 +561,3 @@ export default {
   processShopEvents,
   startEventPoller,
 };
-

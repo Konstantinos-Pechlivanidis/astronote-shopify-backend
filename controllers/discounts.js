@@ -11,7 +11,9 @@ export async function getShopifyDiscounts(req, res, next) {
   try {
     const shopDomain = req.ctx?.store?.shopDomain;
     if (!shopDomain) {
-      throw new ValidationError('Store context is required. Please ensure you are properly authenticated.');
+      throw new ValidationError(
+        'Store context is required. Please ensure you are properly authenticated.',
+      );
     }
 
     let discountCodes;
@@ -43,13 +45,16 @@ export async function getShopifyDiscounts(req, res, next) {
 
     // Ensure discountCodes is an array
     if (!Array.isArray(discountCodes)) {
-      logger.warn('getDiscountCodes returned non-array', { shopDomain, type: typeof discountCodes });
+      logger.warn('getDiscountCodes returned non-array', {
+        shopDomain,
+        type: typeof discountCodes,
+      });
       discountCodes = [];
     }
 
     // Filter only active and non-expired discounts
-    const activeDiscounts = discountCodes.filter(discount =>
-      discount && discount.isActive && !discount.isExpired,
+    const activeDiscounts = discountCodes.filter(
+      discount => discount && discount.isActive && !discount.isExpired,
     );
 
     logger.info('Shopify discounts retrieved', {
@@ -82,7 +87,9 @@ export async function getShopifyDiscount(req, res, next) {
     const { id } = req.params;
     const shopDomain = req.ctx?.store?.shopDomain;
     if (!shopDomain) {
-      throw new ValidationError('Store context is required. Please ensure you are properly authenticated.');
+      throw new ValidationError(
+        'Store context is required. Please ensure you are properly authenticated.',
+      );
     }
 
     if (!id) {
@@ -99,7 +106,9 @@ export async function getShopifyDiscount(req, res, next) {
         error: shopifyError.message,
         stack: shopifyError.stack,
       });
-      throw new ValidationError(`Failed to retrieve discount: ${shopifyError.message}`);
+      throw new ValidationError(
+        `Failed to retrieve discount: ${shopifyError.message}`,
+      );
     }
 
     if (!discount) {
@@ -158,8 +167,11 @@ export async function validateDiscount(req, res, next) {
       discount,
       isValid,
       canUse,
-      reason: !isValid ? 'Discount is not active or has expired' :
-        !canUse ? 'Discount is not available for use' : null,
+      reason: !isValid
+        ? 'Discount is not active or has expired'
+        : !canUse
+          ? 'Discount is not available for use'
+          : null,
     });
   } catch (error) {
     logger.error('Error in validateDiscount', {

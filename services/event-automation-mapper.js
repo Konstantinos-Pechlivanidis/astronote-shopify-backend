@@ -118,7 +118,10 @@ export function shouldTriggerAutomation(event, automationType, eventData = {}) {
 
   // Welcome automation: requires customer with SMS consent
   if (automationType === 'welcome') {
-    if (subjectType !== 'CUSTOMER' || (action !== 'created' && action !== 'updated')) {
+    if (
+      subjectType !== 'CUSTOMER' ||
+      (action !== 'created' && action !== 'updated')
+    ) {
       return false;
     }
     // Check if customer has SMS consent
@@ -130,7 +133,10 @@ export function shouldTriggerAutomation(event, automationType, eventData = {}) {
 
   // Order placed automation: requires order event
   if (automationType === 'order_placed') {
-    if (subjectType !== 'ORDER' || (action !== 'created' && action !== 'confirmed')) {
+    if (
+      subjectType !== 'ORDER' ||
+      (action !== 'created' && action !== 'confirmed')
+    ) {
       return false;
     }
     // Check if order has customer
@@ -142,7 +148,10 @@ export function shouldTriggerAutomation(event, automationType, eventData = {}) {
 
   // Order fulfilled automation: requires fulfillment event with success status
   if (automationType === 'order_fulfilled') {
-    if (subjectType !== 'FULFILLMENT' || (action !== 'created' && action !== 'updated')) {
+    if (
+      subjectType !== 'FULFILLMENT' ||
+      (action !== 'created' && action !== 'updated')
+    ) {
       return false;
     }
     // Check if fulfillment is actually fulfilled (Shopify uses 'SUCCESS' status)
@@ -185,4 +194,3 @@ export default {
   shouldTriggerAutomation,
   getExpectedEventForAutomation,
 };
-

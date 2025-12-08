@@ -8,7 +8,11 @@ import {
   triggerWelcome,
 } from '../../services/automations.js';
 import prisma from '../../services/prisma.js';
-import { validateAndConsumeCredits, InsufficientCreditsError, logAutomationSkip } from '../../services/credit-validation.js';
+import {
+  validateAndConsumeCredits,
+  InsufficientCreditsError,
+  logAutomationSkip,
+} from '../../services/credit-validation.js';
 
 /**
  * Handle abandoned cart automation trigger
@@ -30,12 +34,19 @@ export async function handleAbandonedCartTrigger(job) {
     } catch (error) {
       if (error instanceof InsufficientCreditsError) {
         await logAutomationSkip(automationId, shopId, 'Insufficient credits');
-        logger.warn('Abandoned cart automation skipped due to insufficient credits', {
-          shopId,
-          contactId,
-          automationId,
-        });
-        return { success: false, reason: 'insufficient_credits', error: error.message };
+        logger.warn(
+          'Abandoned cart automation skipped due to insufficient credits',
+          {
+            shopId,
+            contactId,
+            automationId,
+          },
+        );
+        return {
+          success: false,
+          reason: 'insufficient_credits',
+          error: error.message,
+        };
       }
       throw error;
     }
@@ -93,12 +104,19 @@ export async function handleOrderConfirmationTrigger(job) {
     } catch (error) {
       if (error instanceof InsufficientCreditsError) {
         await logAutomationSkip(automationId, shopId, 'Insufficient credits');
-        logger.warn('Order confirmation automation skipped due to insufficient credits', {
-          shopId,
-          contactId,
-          automationId,
-        });
-        return { success: false, reason: 'insufficient_credits', error: error.message };
+        logger.warn(
+          'Order confirmation automation skipped due to insufficient credits',
+          {
+            shopId,
+            contactId,
+            automationId,
+          },
+        );
+        return {
+          success: false,
+          reason: 'insufficient_credits',
+          error: error.message,
+        };
       }
       throw error;
     }
@@ -160,12 +178,19 @@ export async function handleOrderFulfilledTrigger(job) {
     } catch (error) {
       if (error instanceof InsufficientCreditsError) {
         await logAutomationSkip(automationId, shopId, 'Insufficient credits');
-        logger.warn('Order fulfillment automation skipped due to insufficient credits', {
-          shopId,
-          contactId,
-          automationId,
-        });
-        return { success: false, reason: 'insufficient_credits', error: error.message };
+        logger.warn(
+          'Order fulfillment automation skipped due to insufficient credits',
+          {
+            shopId,
+            contactId,
+            automationId,
+          },
+        );
+        return {
+          success: false,
+          reason: 'insufficient_credits',
+          error: error.message,
+        };
       }
       throw error;
     }
@@ -226,12 +251,19 @@ export async function handleCustomerReengagementTrigger(job) {
     } catch (error) {
       if (error instanceof InsufficientCreditsError) {
         await logAutomationSkip(automationId, shopId, 'Insufficient credits');
-        logger.warn('Customer re-engagement automation skipped due to insufficient credits', {
-          shopId,
-          contactId,
-          automationId,
-        });
-        return { success: false, reason: 'insufficient_credits', error: error.message };
+        logger.warn(
+          'Customer re-engagement automation skipped due to insufficient credits',
+          {
+            shopId,
+            contactId,
+            automationId,
+          },
+        );
+        return {
+          success: false,
+          reason: 'insufficient_credits',
+          error: error.message,
+        };
       }
       throw error;
     }
@@ -293,7 +325,11 @@ export async function handleBirthdayTrigger(_job) {
           contactId,
           automationId,
         });
-        return { success: false, reason: 'insufficient_credits', error: error.message };
+        return {
+          success: false,
+          reason: 'insufficient_credits',
+          error: error.message,
+        };
       }
       throw error;
     }
@@ -356,7 +392,11 @@ export async function handleWelcomeTrigger(job) {
           contactId,
           automationId,
         });
-        return { success: false, reason: 'insufficient_credits', error: error.message };
+        return {
+          success: false,
+          reason: 'insufficient_credits',
+          error: error.message,
+        };
       }
       throw error;
     }
@@ -431,7 +471,8 @@ export async function handleDailyReengagementCheck(_job) {
 
         // In a real implementation, you would check order history here
         // For now, we'll trigger for a subset of contacts
-        if (Math.random() < 0.1) { // 10% chance for demo
+        if (Math.random() < 0.1) {
+          // 10% chance for demo
           const result = await triggerCustomerReengagement({
             shopId: shop.id,
             contactId: contact.id,
@@ -502,7 +543,8 @@ export async function handleDailyBirthdayCheck(_job) {
 
         // In a real implementation, you would check birthday data here
         // For now, we'll trigger for a subset of contacts
-        if (Math.random() < 0.05) { // 5% chance for demo
+        if (Math.random() < 0.05) {
+          // 5% chance for demo
           const result = await triggerBirthdayOffer({
             shopId: shop.id,
             contactId: contact.id,

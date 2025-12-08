@@ -72,7 +72,9 @@ class DatabaseQueue {
     }
 
     this.isProcessing = true;
-    logger.info('Database queue processor started', { queueName: this.queueName });
+    logger.info('Database queue processor started', {
+      queueName: this.queueName,
+    });
 
     // Process jobs immediately
     await this.processJobs();
@@ -92,7 +94,9 @@ class DatabaseQueue {
       clearInterval(this.pollTimer);
       this.pollTimer = null;
     }
-    logger.info('Database queue processor stopped', { queueName: this.queueName });
+    logger.info('Database queue processor stopped', {
+      queueName: this.queueName,
+    });
   }
 
   /**
@@ -109,15 +113,9 @@ class DatabaseQueue {
         where: {
           queueName: this.queueName,
           status: 'pending',
-          OR: [
-            { delay: null },
-            { delay: { lte: new Date() } },
-          ],
+          OR: [{ delay: null }, { delay: { lte: new Date() } }],
         },
-        orderBy: [
-          { priority: 'desc' },
-          { createdAt: 'asc' },
-        ],
+        orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
         take: this.options.concurrency,
       });
 
@@ -397,12 +395,15 @@ export const databaseCampaignQueue = createDatabaseQueue('campaign-send', {
   attempts: 2,
 });
 
-export const databaseAutomationQueue = createDatabaseQueue('automation-trigger', {
-  concurrency: 10,
-  removeOnComplete: 200,
-  removeOnFail: 100,
-  attempts: 2,
-});
+export const databaseAutomationQueue = createDatabaseQueue(
+  'automation-trigger',
+  {
+    concurrency: 10,
+    removeOnComplete: 200,
+    removeOnFail: 100,
+    attempts: 2,
+  },
+);
 
 export default {
   createDatabaseQueue,
@@ -410,4 +411,3 @@ export default {
   databaseCampaignQueue,
   databaseAutomationQueue,
 };
-

@@ -31,7 +31,7 @@ export function withStoreScope(storeId, model) {
     },
 
     // Find unique with store scope
-    findUnique: (args) => {
+    findUnique: args => {
       if (typeof args === 'string') {
         // Handle findUnique({ where: { id: 'xxx' } })
         return model.findUnique({
@@ -65,7 +65,7 @@ export function withStoreScope(storeId, model) {
     },
 
     // Create with store scope
-    create: (args) => {
+    create: args => {
       const scopedArgs = {
         ...args,
         data: {
@@ -77,7 +77,7 @@ export function withStoreScope(storeId, model) {
     },
 
     // Update with store scope
-    update: (args) => {
+    update: args => {
       const scopedArgs = {
         ...args,
         where: {
@@ -89,7 +89,7 @@ export function withStoreScope(storeId, model) {
     },
 
     // Update many with store scope
-    updateMany: (args) => {
+    updateMany: args => {
       const scopedArgs = {
         ...args,
         where: {
@@ -101,7 +101,7 @@ export function withStoreScope(storeId, model) {
     },
 
     // Delete with store scope
-    delete: (args) => {
+    delete: args => {
       const scopedArgs = {
         ...args,
         where: {
@@ -149,7 +149,7 @@ export function withStoreScope(storeId, model) {
     },
 
     // Group by with store scope
-    groupBy: (args) => {
+    groupBy: args => {
       const scopedArgs = {
         ...args,
         where: {
@@ -165,7 +165,12 @@ export function withStoreScope(storeId, model) {
 /**
  * Validate that an entity belongs to the current store
  */
-export async function validateStoreOwnership(storeId, model, entityId, entityName = 'Entity') {
+export async function validateStoreOwnership(
+  storeId,
+  model,
+  entityId,
+  entityName = 'Entity',
+) {
   try {
     const entity = await model.findUnique({
       where: { id: entityId },
@@ -195,7 +200,12 @@ export async function validateStoreOwnership(storeId, model, entityId, entityNam
 /**
  * Validate multiple entities belong to the current store
  */
-export async function validateMultipleStoreOwnership(storeId, model, entityIds, entityName = 'Entities') {
+export async function validateMultipleStoreOwnership(
+  storeId,
+  model,
+  entityIds,
+  entityName = 'Entities',
+) {
   try {
     const entities = await model.findMany({
       where: {
@@ -204,7 +214,9 @@ export async function validateMultipleStoreOwnership(storeId, model, entityIds, 
       select: { id: true, shopId: true },
     });
 
-    const invalidEntities = entities.filter(entity => entity.shopId !== storeId);
+    const invalidEntities = entities.filter(
+      entity => entity.shopId !== storeId,
+    );
 
     if (invalidEntities.length > 0) {
       throw new Error(`Some ${entityName} do not belong to the current store`);
@@ -234,7 +246,7 @@ export async function withStoreTransaction(storeId, callback) {
     throw new Error('Store ID is required for scoped transactions');
   }
 
-  return await prisma.$transaction(async (tx) => {
+  return await prisma.$transaction(async tx => {
     // Create a scoped transaction context
     const scopedTx = {
       ...tx,

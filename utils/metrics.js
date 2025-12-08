@@ -14,7 +14,12 @@ class MetricsCollector {
     const current = this.counters.get(key) || 0;
     this.counters.set(key, current + value);
 
-    logger.debug(`Counter ${name} incremented`, { name, value, labels, total: current + value });
+    logger.debug(`Counter ${name} incremented`, {
+      name,
+      value,
+      labels,
+      total: current + value,
+    });
   }
 
   getCounter(name, labels = {}) {
@@ -78,16 +83,28 @@ class MetricsCollector {
   }
 
   recordCampaignCreated(shopId, audience) {
-    this.incrementCounter('campaigns_created_total', 1, { shop_id: shopId, audience });
+    this.incrementCounter('campaigns_created_total', 1, {
+      shop_id: shopId,
+      audience,
+    });
   }
 
   recordContactAdded(shopId, source = 'manual') {
-    this.incrementCounter('contacts_added_total', 1, { shop_id: shopId, source });
+    this.incrementCounter('contacts_added_total', 1, {
+      shop_id: shopId,
+      source,
+    });
   }
 
   recordWalletTransaction(shopId, type, amount) {
-    this.incrementCounter('wallet_transactions_total', 1, { shop_id: shopId, type });
-    this.incrementCounter('wallet_credits_total', amount, { shop_id: shopId, type });
+    this.incrementCounter('wallet_transactions_total', 1, {
+      shop_id: shopId,
+      type,
+    });
+    this.incrementCounter('wallet_credits_total', amount, {
+      shop_id: shopId,
+      type,
+    });
   }
 
   recordApiRequest(method, endpoint, statusCode, duration) {
@@ -161,7 +178,7 @@ class MetricsCollector {
   getMetricKey(name, labels = {}) {
     const labelString = Object.keys(labels)
       .sort()
-      .map((key) => `${key}=${labels[key]}`)
+      .map(key => `${key}=${labels[key]}`)
       .join(',');
 
     return labelString ? `${name}{${labelString}}` : name;

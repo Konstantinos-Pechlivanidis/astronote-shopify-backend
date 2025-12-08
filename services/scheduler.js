@@ -50,7 +50,7 @@ export async function processScheduledCampaigns() {
       try {
         // Use a transaction to update status and queue the job atomically
         // This prevents the same campaign from being queued multiple times
-        await prisma.$transaction(async (tx) => {
+        await prisma.$transaction(async tx => {
           // Re-check the campaign status to ensure it's still 'scheduled'
           // This prevents race conditions if the campaign was already processed
           const currentCampaign = await tx.campaign.findUnique({
@@ -162,12 +162,12 @@ export function startScheduledCampaignsProcessor() {
     try {
       // Process scheduled campaigns
       processScheduledCampaigns()
-        .then((result) => {
+        .then(result => {
           if (result.queued > 0) {
             logger.info('Scheduled campaigns processed', result);
           }
         })
-        .catch((error) => {
+        .catch(error => {
           logger.error('Error in scheduled campaigns processor', {
             error: error.message,
           });
@@ -263,7 +263,7 @@ export function startBirthdayAutomationScheduler() {
 
     setTimeout(() => {
       processDailyBirthdayAutomations()
-        .then((result) => {
+        .then(result => {
           logger.info('Daily birthday automation check completed', {
             total: result.total,
             sent: result.sent,
@@ -271,7 +271,7 @@ export function startBirthdayAutomationScheduler() {
             failed: result.failed,
           });
         })
-        .catch((error) => {
+        .catch(error => {
           logger.error('Error in daily birthday automation check', {
             error: error.message,
             stack: error.stack,
@@ -289,12 +289,14 @@ export function startBirthdayAutomationScheduler() {
 
   if (timeUntilMidnight < oneHour) {
     // Run immediately if we're close to midnight
-    logger.info('Running birthday automation check immediately (close to midnight)');
+    logger.info(
+      'Running birthday automation check immediately (close to midnight)',
+    );
     processDailyBirthdayAutomations()
-      .then((result) => {
+      .then(result => {
         logger.info('Initial birthday automation check completed', result);
       })
-      .catch((error) => {
+      .catch(error => {
         logger.error('Error in initial birthday automation check', {
           error: error.message,
         });
@@ -317,4 +319,3 @@ export default {
   processScheduledCampaigns,
   startBirthdayAutomationScheduler,
 };
-

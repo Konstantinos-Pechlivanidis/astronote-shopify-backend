@@ -1,7 +1,11 @@
 import prisma from './prisma.js';
 import { logger } from '../utils/logger.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
-import { validateAndConsumeCredits, InsufficientCreditsError, refundCredits } from './credit-validation.js';
+import {
+  validateAndConsumeCredits,
+  InsufficientCreditsError,
+  refundCredits,
+} from './credit-validation.js';
 import { smsQueue } from '../queue/index.js';
 import { appendUnsubscribeLink } from '../utils/unsubscribe.js';
 import { replacePlaceholders } from '../utils/personalization.js';
@@ -71,7 +75,10 @@ async function resolveRecipients(shopId, audience) {
     });
 
     if (!segment) {
-      logger.warn('Segment not found or does not belong to shop', { segmentId, shopId });
+      logger.warn('Segment not found or does not belong to shop', {
+        segmentId,
+        shopId,
+      });
       return []; // Return empty if segment doesn't belong to shop
     }
 
@@ -86,7 +93,12 @@ async function resolveRecipients(shopId, audience) {
       },
       include: {
         contact: {
-          select: { id: true, phoneE164: true, firstName: true, lastName: true },
+          select: {
+            id: true,
+            phoneE164: true,
+            firstName: true,
+            lastName: true,
+          },
         },
       },
     });
@@ -161,7 +173,12 @@ async function* streamRecipients(shopId, audience, batchSize = 1000) {
         },
         include: {
           contact: {
-            select: { id: true, phoneE164: true, firstName: true, lastName: true },
+            select: {
+              id: true,
+              phoneE164: true,
+              firstName: true,
+              lastName: true,
+            },
           },
         },
         take: batchSize,
@@ -247,16 +264,25 @@ function validateCampaignData(campaignData) {
     throw new ValidationError('Message is too long (max 1600 characters)');
   }
 
-  if (!['immediate', 'scheduled', 'recurring'].includes(campaignData.scheduleType)) {
+  if (
+    !['immediate', 'scheduled', 'recurring'].includes(campaignData.scheduleType)
+  ) {
     throw new ValidationError('Invalid schedule type');
   }
 
   if (campaignData.scheduleType === 'scheduled' && !campaignData.scheduleAt) {
-    throw new ValidationError('Schedule date is required for scheduled campaigns');
+    throw new ValidationError(
+      'Schedule date is required for scheduled campaigns',
+    );
   }
 
-  if (campaignData.scheduleType === 'recurring' && !campaignData.recurringDays) {
-    throw new ValidationError('Recurring days is required for recurring campaigns');
+  if (
+    campaignData.scheduleType === 'recurring' &&
+    !campaignData.recurringDays
+  ) {
+    throw new ValidationError(
+      'Recurring days is required for recurring campaigns',
+    );
   }
 }
 
@@ -279,7 +305,12 @@ export async function listCampaigns(storeId, filters = {}) {
 
   const where = { shopId: storeId };
 
-  if (status && ['draft', 'scheduled', 'sending', 'sent', 'failed', 'cancelled'].includes(status)) {
+  if (
+    status &&
+    ['draft', 'scheduled', 'sending', 'sent', 'failed', 'cancelled'].includes(
+      status,
+    )
+  ) {
     where.status = status;
   }
 
@@ -304,11 +335,15 @@ export async function listCampaigns(storeId, filters = {}) {
   // For sent campaigns, count actual CampaignRecipient records
   // For scheduled/draft campaigns, calculate based on audience
   const campaignsWithRecipientCounts = await Promise.all(
-    campaigns.map(async (campaign) => {
+    campaigns.map(async campaign => {
       let recipientCount = 0;
 
       // If campaign has been sent (status is 'sending' or 'sent'), count actual recipients
-      if (campaign.status === 'sending' || campaign.status === 'sent' || campaign.status === 'failed') {
+      if (
+        campaign.status === 'sending' ||
+        campaign.status === 'sent' ||
+        campaign.status === 'failed'
+      ) {
         recipientCount = await prisma.campaignRecipient.count({
           where: { campaignId: campaign.id },
         });
@@ -354,7 +389,11 @@ export async function listCampaigns(storeId, filters = {}) {
 
   const totalPages = Math.ceil(total / parseInt(pageSize));
 
-  logger.info('Campaigns listed successfully', { storeId, total, returned: campaigns.length });
+  logger.info('Campaigns listed successfully', {
+    storeId,
+    total,
+    returned: campaigns.length,
+  });
 
   return {
     campaigns: campaignsWithRecipientCounts,
@@ -400,7 +439,11 @@ export async function getCampaignById(storeId, campaignId) {
   // For scheduled/draft campaigns, calculate based on audience
   let recipientCount = 0;
 
-  if (campaign.status === 'sending' || campaign.status === 'sent' || campaign.status === 'failed') {
+  if (
+    campaign.status === 'sending' ||
+    campaign.status === 'sent' ||
+    campaign.status === 'failed'
+  ) {
     // Count actual recipients for campaigns that have been sent
     recipientCount = await prisma.campaignRecipient.count({
       where: { campaignId },
@@ -437,7 +480,12 @@ export async function getCampaignById(storeId, campaignId) {
     }
   }
 
-  logger.info('Campaign retrieved successfully', { storeId, campaignId, recipientCount, status: campaign.status });
+  logger.info('Campaign retrieved successfully', {
+    storeId,
+    campaignId,
+    recipientCount,
+    status: campaign.status,
+  });
 
   return {
     ...campaign,
@@ -464,7 +512,9 @@ export async function createCampaign(storeId, campaignData) {
     try {
       scheduleAtDate = new Date(campaignData.scheduleAt);
       if (isNaN(scheduleAtDate.getTime())) {
-        throw new ValidationError('Invalid schedule date format. Please use ISO 8601 format.');
+        throw new ValidationError(
+          'Invalid schedule date format. Please use ISO 8601 format.',
+        );
       }
       // Validate that scheduled date is in the future
       if (scheduleAtDate <= new Date()) {
@@ -479,7 +529,7 @@ export async function createCampaign(storeId, campaignData) {
   }
 
   // Use transaction to ensure both campaign and metrics are created atomically
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async tx => {
     // Create campaign
     const campaign = await tx.campaign.create({
       data: {
@@ -503,7 +553,10 @@ export async function createCampaign(storeId, campaignData) {
     return campaign;
   });
 
-  logger.info('Campaign created successfully', { storeId, campaignId: result.id });
+  logger.info('Campaign created successfully', {
+    storeId,
+    campaignId: result.id,
+  });
 
   return result;
 }
@@ -529,7 +582,9 @@ export async function updateCampaign(storeId, campaignId, campaignData) {
 
   // Can't update sent or sending campaigns
   if (existing.status === 'sent' || existing.status === 'sending') {
-    throw new ValidationError('Cannot update a campaign that has already been sent or is currently sending');
+    throw new ValidationError(
+      'Cannot update a campaign that has already been sent or is currently sending',
+    );
   }
 
   // Prepare update data
@@ -552,12 +607,17 @@ export async function updateCampaign(storeId, campaignId, campaignData) {
     updateData.message = campaignData.message.trim();
   }
 
-  if (campaignData.audience !== undefined) updateData.audience = campaignData.audience;
-  if (campaignData.discountId !== undefined) updateData.discountId = campaignData.discountId;
+  if (campaignData.audience !== undefined)
+    updateData.audience = campaignData.audience;
+  if (campaignData.discountId !== undefined)
+    updateData.discountId = campaignData.discountId;
   if (campaignData.scheduleType !== undefined) {
     updateData.scheduleType = campaignData.scheduleType;
     // If changing from scheduled to immediate, clear scheduleAt and set status to draft
-    if (campaignData.scheduleType === 'immediate' && existing.scheduleType === 'scheduled') {
+    if (
+      campaignData.scheduleType === 'immediate' &&
+      existing.scheduleType === 'scheduled'
+    ) {
       updateData.scheduleAt = null;
       updateData.status = 'draft';
     }
@@ -567,7 +627,9 @@ export async function updateCampaign(storeId, campaignId, campaignData) {
     if (campaignData.scheduleAt) {
       const scheduleAtDate = new Date(campaignData.scheduleAt);
       if (isNaN(scheduleAtDate.getTime())) {
-        throw new ValidationError('Invalid schedule date format. Please use ISO 8601 format.');
+        throw new ValidationError(
+          'Invalid schedule date format. Please use ISO 8601 format.',
+        );
       }
       if (scheduleAtDate <= new Date()) {
         throw new ValidationError('Schedule date must be in the future');
@@ -577,7 +639,8 @@ export async function updateCampaign(storeId, campaignId, campaignData) {
       updateData.scheduleAt = null;
     }
   }
-  if (campaignData.recurringDays !== undefined) updateData.recurringDays = campaignData.recurringDays;
+  if (campaignData.recurringDays !== undefined)
+    updateData.recurringDays = campaignData.recurringDays;
 
   // Update campaign
   const campaign = await prisma.campaign.update({
@@ -610,7 +673,9 @@ export async function deleteCampaign(storeId, campaignId) {
 
   // Can't delete sent campaigns
   if (existing.status === 'sent' || existing.status === 'sending') {
-    throw new ValidationError('Cannot delete a campaign that is sent or currently sending');
+    throw new ValidationError(
+      'Cannot delete a campaign that is sent or currently sending',
+    );
   }
 
   // Delete campaign (metrics and recipients will cascade)
@@ -696,8 +761,14 @@ export async function sendCampaign(storeId, campaignId) {
   // 'draft' campaigns are sent immediately (Send Now)
   // 'scheduled' campaigns are sent when their scheduleAt time arrives
   // 'sending' status means the scheduler already queued it (prevents duplicate processing)
-  if (campaign.status !== 'draft' && campaign.status !== 'scheduled' && campaign.status !== 'sending') {
-    throw new ValidationError('Only draft, scheduled, or sending campaigns can be sent');
+  if (
+    campaign.status !== 'draft' &&
+    campaign.status !== 'scheduled' &&
+    campaign.status !== 'sending'
+  ) {
+    throw new ValidationError(
+      'Only draft, scheduled, or sending campaigns can be sent',
+    );
   }
 
   // Get recipient count first (for credit validation)
@@ -738,7 +809,11 @@ export async function sendCampaign(storeId, campaignId) {
   // Validate and consume credits upfront
   // If campaign fails before any SMS is sent, credits will be refunded
   let creditsConsumed = false;
-  await validateAndConsumeCredits(storeId, recipientCount, `campaign:${campaignId}`);
+  await validateAndConsumeCredits(
+    storeId,
+    recipientCount,
+    `campaign:${campaignId}`,
+  );
   creditsConsumed = true;
 
   // Update campaign status
@@ -756,7 +831,11 @@ export async function sendCampaign(storeId, campaignId) {
         recipientCount,
         error: error.message,
       });
-      await refundCredits(storeId, recipientCount, `campaign:${campaignId}:rollback:status_update_failed`);
+      await refundCredits(
+        storeId,
+        recipientCount,
+        `campaign:${campaignId}:rollback:status_update_failed`,
+      );
     }
     throw error;
   }
@@ -766,7 +845,11 @@ export async function sendCampaign(storeId, campaignId) {
     where: { shopId: storeId },
     select: { senderName: true, senderNumber: true },
   });
-  const sender = shopSettings?.senderName || shopSettings?.senderNumber || process.env.MITTO_SENDER_NAME || 'Astronote';
+  const sender =
+    shopSettings?.senderName ||
+    shopSettings?.senderNumber ||
+    process.env.MITTO_SENDER_NAME ||
+    'Astronote';
 
   // Use streaming for large campaigns to avoid memory issues
   // For campaigns with 10k+ recipients, use streaming
@@ -786,7 +869,10 @@ export async function sendCampaign(storeId, campaignId) {
       });
 
       if (store?.shopDomain) {
-        const discount = await getDiscountCode(store.shopDomain, campaign.discountId);
+        const discount = await getDiscountCode(
+          store.shopDomain,
+          campaign.discountId,
+        );
         discountCode = discount?.code || '';
         logger.info('Discount code fetched for campaign', {
           storeId,
@@ -821,7 +907,11 @@ export async function sendCampaign(storeId, campaignId) {
       });
 
       // Stream recipients and process in batches
-      for await (const recipientBatch of streamRecipients(storeId, campaign.audience, BATCH_SIZE)) {
+      for await (const recipientBatch of streamRecipients(
+        storeId,
+        campaign.audience,
+        BATCH_SIZE,
+      )) {
         // Create recipient records in batch
         await prisma.campaignRecipient.createMany({
           data: recipientBatch.map(r => ({
@@ -835,18 +925,18 @@ export async function sendCampaign(storeId, campaignId) {
 
         // Queue SMS jobs in batch
         // Get frontend base URL for unsubscribe links
-        const frontendBaseUrl = process.env.FRONTEND_URL || process.env.FRONTEND_BASE_URL || 'https://astronote-shopify-frontend.onrender.com';
+        const frontendBaseUrl =
+          process.env.FRONTEND_URL ||
+          process.env.FRONTEND_BASE_URL ||
+          'https://astronote-shopify-frontend.onrender.com';
 
         const smsJobs = recipientBatch.map(recipient => {
           // Replace personalization placeholders with contact data and discount code
-          const personalizedMessage = replacePlaceholders(
-            campaign.message,
-            {
-              firstName: recipient.firstName,
-              lastName: recipient.lastName,
-              discountCode,
-            },
-          );
+          const personalizedMessage = replacePlaceholders(campaign.message, {
+            firstName: recipient.firstName,
+            lastName: recipient.lastName,
+            discountCode,
+          });
 
           // Append unsubscribe link to message
           const messageWithUnsubscribe = appendUnsubscribeLink(
@@ -908,18 +998,18 @@ export async function sendCampaign(storeId, campaignId) {
 
       // Queue SMS jobs in batches
       // Get frontend base URL for unsubscribe links
-      const frontendBaseUrl = process.env.FRONTEND_URL || process.env.FRONTEND_BASE_URL || 'https://astronote-shopify-frontend.onrender.com';
+      const frontendBaseUrl =
+        process.env.FRONTEND_URL ||
+        process.env.FRONTEND_BASE_URL ||
+        'https://astronote-shopify-frontend.onrender.com';
 
       const smsJobs = recipients.map(recipient => {
         // Replace personalization placeholders with contact data and discount code
-        const personalizedMessage = replacePlaceholders(
-          campaign.message,
-          {
-            firstName: recipient.firstName,
-            lastName: recipient.lastName,
-            discountCode,
-          },
-        );
+        const personalizedMessage = replacePlaceholders(campaign.message, {
+          firstName: recipient.firstName,
+          lastName: recipient.lastName,
+          discountCode,
+        });
 
         // Append unsubscribe link to message
         const messageWithUnsubscribe = appendUnsubscribeLink(
@@ -990,7 +1080,11 @@ export async function sendCampaign(storeId, campaignId) {
         error: error.message,
       });
       try {
-        await refundCredits(storeId, recipientCount, `campaign:${campaignId}:rollback:queuing_failed`);
+        await refundCredits(
+          storeId,
+          recipientCount,
+          `campaign:${campaignId}:rollback:queuing_failed`,
+        );
         // Revert campaign status to draft
         await prisma.campaign.update({
           where: { id: campaignId },
@@ -1041,7 +1135,9 @@ export async function scheduleCampaign(storeId, campaignId, scheduleData) {
   const scheduleAt = new Date(scheduleData.scheduleAt);
 
   if (isNaN(scheduleAt.getTime())) {
-    throw new ValidationError('Invalid schedule date format. Please use ISO 8601 format.');
+    throw new ValidationError(
+      'Invalid schedule date format. Please use ISO 8601 format.',
+    );
   }
 
   if (scheduleAt <= new Date()) {
@@ -1123,7 +1219,11 @@ export async function retryFailedSms(storeId, campaignId) {
     where: { shopId: storeId },
     select: { senderName: true, senderNumber: true },
   });
-  const sender = shopSettings?.senderName || shopSettings?.senderNumber || process.env.MITTO_SENDER_NAME || 'Astronote';
+  const sender =
+    shopSettings?.senderName ||
+    shopSettings?.senderNumber ||
+    process.env.MITTO_SENDER_NAME ||
+    'Astronote';
 
   // Reset failed recipients to pending status
   await prisma.campaignRecipient.updateMany({
@@ -1242,11 +1342,14 @@ export async function getCampaignStats(storeId) {
     totalCampaigns: total, // Alias for consistency with expected response structure
     byStatus: {
       draft: statusStats.find(s => s.status === 'draft')?._count?.status || 0,
-      scheduled: statusStats.find(s => s.status === 'scheduled')?._count?.status || 0,
-      sending: statusStats.find(s => s.status === 'sending')?._count?.status || 0,
+      scheduled:
+        statusStats.find(s => s.status === 'scheduled')?._count?.status || 0,
+      sending:
+        statusStats.find(s => s.status === 'sending')?._count?.status || 0,
       sent: statusStats.find(s => s.status === 'sent')?._count?.status || 0,
       failed: statusStats.find(s => s.status === 'failed')?._count?.status || 0,
-      cancelled: statusStats.find(s => s.status === 'cancelled')?._count?.status || 0,
+      cancelled:
+        statusStats.find(s => s.status === 'cancelled')?._count?.status || 0,
     },
     recent: recentCampaigns,
     recentCampaigns, // Alias for backward compatibility
@@ -1269,4 +1372,3 @@ export default {
   getCampaignMetrics,
   getCampaignStats,
 };
-

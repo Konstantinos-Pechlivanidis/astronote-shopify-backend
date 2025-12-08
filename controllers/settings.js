@@ -43,19 +43,23 @@ export async function getSettings(req, res, next) {
       sections: [
         {
           title: 'SMS Credits',
-          content: 'Each SMS message costs 1 credit. Credits are deducted automatically when messages are sent successfully.',
+          content:
+            'Each SMS message costs 1 credit. Credits are deducted automatically when messages are sent successfully.',
         },
         {
           title: 'Purchasing Credits',
-          content: 'You can purchase credit packages through our secure Stripe checkout. Credits are added to your account immediately after payment.',
+          content:
+            'You can purchase credit packages through our secure Stripe checkout. Credits are added to your account immediately after payment.',
         },
         {
           title: 'Sender Number',
-          content: 'Set your sender number or name to personalize your SMS messages. This will be used for all campaigns and automations.',
+          content:
+            'Set your sender number or name to personalize your SMS messages. This will be used for all campaigns and automations.',
         },
         {
           title: 'Support',
-          content: 'Need help? Visit our support center or contact us at support@astronote.com',
+          content:
+            'Need help? Visit our support center or contact us at support@astronote.com',
         },
       ],
     };
@@ -105,7 +109,9 @@ export async function updateSenderNumber(req, res, next) {
 
     // Validate sender number format
     if (!senderNumber || typeof senderNumber !== 'string') {
-      throw new ValidationError('Sender number is required and must be a string');
+      throw new ValidationError(
+        'Sender number is required and must be a string',
+      );
     }
 
     // Validate format: E.164 for phone numbers or 3-11 alphanumeric for names
@@ -113,7 +119,9 @@ export async function updateSenderNumber(req, res, next) {
     const isAlphanumeric = /^[a-zA-Z0-9]{3,11}$/.test(senderNumber);
 
     if (!isE164 && !isAlphanumeric) {
-      throw new ValidationError('Sender number must be either a valid E.164 phone number (e.g., +1234567890) or 3-11 alphanumeric characters');
+      throw new ValidationError(
+        'Sender number must be either a valid E.164 phone number (e.g., +1234567890) or 3-11 alphanumeric characters',
+      );
     }
 
     // Update or create shop settings
@@ -133,10 +141,14 @@ export async function updateSenderNumber(req, res, next) {
       senderNumber,
     });
 
-    return sendSuccess(res, {
-      senderNumber: settings.senderNumber,
-      updatedAt: settings.updatedAt,
-    }, 'Sender number updated successfully');
+    return sendSuccess(
+      res,
+      {
+        senderNumber: settings.senderNumber,
+        updatedAt: settings.updatedAt,
+      },
+      'Sender number updated successfully',
+    );
   } catch (error) {
     logger.error('Failed to update sender number', {
       error: error.message,
@@ -252,7 +264,9 @@ export async function updateSettings(req, res, next) {
           updateData.senderName = senderId;
           updateData.senderNumber = null; // Clear senderNumber if setting name
         } else {
-          throw new ValidationError('Sender ID must be either a valid E.164 phone number (e.g., +1234567890) or 3-11 alphanumeric characters');
+          throw new ValidationError(
+            'Sender ID must be either a valid E.164 phone number (e.g., +1234567890) or 3-11 alphanumeric characters',
+          );
         }
       } else {
         // Clear both if empty
@@ -276,7 +290,10 @@ export async function updateSettings(req, res, next) {
     }
 
     // Update settings
-    const updatedSettings = await settingsService.updateSettings(shopId, updateData);
+    const updatedSettings = await settingsService.updateSettings(
+      shopId,
+      updateData,
+    );
 
     logger.info('Settings updated', {
       shopId,
@@ -284,14 +301,19 @@ export async function updateSettings(req, res, next) {
     });
 
     // Return in same format as getSettings
-    return sendSuccess(res, {
-      senderId: updatedSettings.senderNumber || updatedSettings.senderName || '',
-      senderNumber: updatedSettings.senderNumber || null,
-      senderName: updatedSettings.senderName || null,
-      timezone: updatedSettings.timezone || 'UTC',
-      currency: updatedSettings.currency || 'EUR',
-      updatedAt: updatedSettings.updatedAt,
-    }, 'Settings updated successfully');
+    return sendSuccess(
+      res,
+      {
+        senderId:
+          updatedSettings.senderNumber || updatedSettings.senderName || '',
+        senderNumber: updatedSettings.senderNumber || null,
+        senderName: updatedSettings.senderName || null,
+        timezone: updatedSettings.timezone || 'UTC',
+        currency: updatedSettings.currency || 'EUR',
+        updatedAt: updatedSettings.updatedAt,
+      },
+      'Settings updated successfully',
+    );
   } catch (error) {
     logger.error('Failed to update settings', {
       error: error.message,

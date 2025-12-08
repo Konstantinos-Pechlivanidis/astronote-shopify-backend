@@ -59,7 +59,12 @@ export async function getLastProcessedEvent(shopId, automationType) {
  * @param {Date} occurredAt - Event occurred timestamp
  * @returns {Promise<Object>} Updated state
  */
-export async function updateLastProcessedEvent(shopId, automationType, eventId, occurredAt) {
+export async function updateLastProcessedEvent(
+  shopId,
+  automationType,
+  eventId,
+  occurredAt,
+) {
   try {
     const state = await prisma.eventProcessingState.upsert({
       where: {
@@ -158,7 +163,11 @@ export function markEventAsProcessed(eventId) {
  * @param {number} fallbackMinutes - Fallback minutes if no last processed event (default: 10)
  * @returns {Promise<Date>} Minimum timestamp
  */
-export async function getMinOccurredAt(shopId, automationType, fallbackMinutes = 10) {
+export async function getMinOccurredAt(
+  shopId,
+  automationType,
+  fallbackMinutes = 10,
+) {
   try {
     const lastState = await getLastProcessedEvent(shopId, automationType);
     if (lastState && lastState.lastProcessedAt) {
@@ -243,4 +252,3 @@ export default {
   getMinOccurredAt,
   batchMarkEventsProcessed,
 };
-

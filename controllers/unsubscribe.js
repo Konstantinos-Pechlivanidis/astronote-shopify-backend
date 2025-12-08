@@ -76,7 +76,8 @@ export async function getUnsubscribeInfo(req, res, next) {
       },
       shop: {
         id: shop.id,
-        shopName: shop.shopName || shop.shopDomain.replace('.myshopify.com', ''),
+        shopName:
+          shop.shopName || shop.shopDomain.replace('.myshopify.com', ''),
         shopDomain: shop.shopDomain,
       },
       token,

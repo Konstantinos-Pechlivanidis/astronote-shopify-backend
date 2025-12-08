@@ -65,7 +65,8 @@ export async function triggerAutomation({
     }
 
     // Prepare message content
-    const messageContent = userAutomation.userMessage || userAutomation.automation.defaultMessage;
+    const messageContent =
+      userAutomation.userMessage || userAutomation.automation.defaultMessage;
 
     // Replace template variables
     const processedMessage = processMessageTemplate(messageContent, {
@@ -75,9 +76,11 @@ export async function triggerAutomation({
     });
 
     // Get sender information
-    const senderNumber = userAutomation.shop.settings?.senderNumber ||
-                         userAutomation.shop.settings?.senderName ||
-                         process.env.MITTO_SENDER_NAME || 'Astronote';
+    const senderNumber =
+      userAutomation.shop.settings?.senderNumber ||
+      userAutomation.shop.settings?.senderName ||
+      process.env.MITTO_SENDER_NAME ||
+      'Astronote';
 
     // Send SMS
     const smsResult = await sendSms({
@@ -152,36 +155,73 @@ function processMessageTemplate(template, data) {
 
   // Replace contact variables
   if (data.contact) {
-    processedMessage = processedMessage.replace(/\{\{firstName\}\}/g, data.contact.firstName || '');
-    processedMessage = processedMessage.replace(/\{\{lastName\}\}/g, data.contact.lastName || '');
-    processedMessage = processedMessage.replace(/\{\{phone\}\}/g, data.contact.phoneE164 || '');
+    processedMessage = processedMessage.replace(
+      /\{\{firstName\}\}/g,
+      data.contact.firstName || '',
+    );
+    processedMessage = processedMessage.replace(
+      /\{\{lastName\}\}/g,
+      data.contact.lastName || '',
+    );
+    processedMessage = processedMessage.replace(
+      /\{\{phone\}\}/g,
+      data.contact.phoneE164 || '',
+    );
   }
 
   // Replace shop variables
   if (data.shop) {
-    processedMessage = processedMessage.replace(/\{\{shopName\}\}/g, data.shop.shopDomain || '');
-    processedMessage = processedMessage.replace(/\{\{shopDomain\}\}/g, data.shop.shopDomain || '');
+    processedMessage = processedMessage.replace(
+      /\{\{shopName\}\}/g,
+      data.shop.shopDomain || '',
+    );
+    processedMessage = processedMessage.replace(
+      /\{\{shopDomain\}\}/g,
+      data.shop.shopDomain || '',
+    );
   }
 
   // Replace additional data variables
   if (data.orderNumber) {
-    processedMessage = processedMessage.replace(/\{\{orderNumber\}\}/g, data.orderNumber);
+    processedMessage = processedMessage.replace(
+      /\{\{orderNumber\}\}/g,
+      data.orderNumber,
+    );
   }
   if (data.trackingLink) {
-    processedMessage = processedMessage.replace(/\{\{trackingLink\}\}/g, data.trackingLink);
+    processedMessage = processedMessage.replace(
+      /\{\{trackingLink\}\}/g,
+      data.trackingLink,
+    );
   }
   if (data.trackingNumber) {
-    processedMessage = processedMessage.replace(/\{\{trackingNumber\}\}/g, data.trackingNumber);
+    processedMessage = processedMessage.replace(
+      /\{\{trackingNumber\}\}/g,
+      data.trackingNumber,
+    );
   }
-  if (data.trackingUrls && Array.isArray(data.trackingUrls) && data.trackingUrls.length > 0) {
+  if (
+    data.trackingUrls &&
+    Array.isArray(data.trackingUrls) &&
+    data.trackingUrls.length > 0
+  ) {
     // Use first tracking URL if available
-    processedMessage = processedMessage.replace(/\{\{trackingLink\}\}/g, data.trackingUrls[0]);
+    processedMessage = processedMessage.replace(
+      /\{\{trackingLink\}\}/g,
+      data.trackingUrls[0],
+    );
   }
   if (data.productName) {
-    processedMessage = processedMessage.replace(/\{\{productName\}\}/g, data.productName);
+    processedMessage = processedMessage.replace(
+      /\{\{productName\}\}/g,
+      data.productName,
+    );
   }
   if (data.discountCode) {
-    processedMessage = processedMessage.replace(/\{\{discountCode\}\}/g, data.discountCode);
+    processedMessage = processedMessage.replace(
+      /\{\{discountCode\}\}/g,
+      data.discountCode,
+    );
   }
 
   return processedMessage;
@@ -190,7 +230,11 @@ function processMessageTemplate(template, data) {
 /**
  * Trigger abandoned cart automation
  */
-export async function triggerAbandonedCart({ shopId, contactId, cartData = {} }) {
+export async function triggerAbandonedCart({
+  shopId,
+  contactId,
+  cartData = {},
+}) {
   return await triggerAutomation({
     shopId,
     contactId,
@@ -202,7 +246,11 @@ export async function triggerAbandonedCart({ shopId, contactId, cartData = {} })
 /**
  * Trigger order confirmation automation
  */
-export async function triggerOrderConfirmation({ shopId, contactId, orderData = {} }) {
+export async function triggerOrderConfirmation({
+  shopId,
+  contactId,
+  orderData = {},
+}) {
   return await triggerAutomation({
     shopId,
     contactId,
@@ -214,7 +262,11 @@ export async function triggerOrderConfirmation({ shopId, contactId, orderData = 
 /**
  * Trigger order fulfillment automation
  */
-export async function triggerOrderFulfilled({ shopId, contactId, orderData = {} }) {
+export async function triggerOrderFulfilled({
+  shopId,
+  contactId,
+  orderData = {},
+}) {
   return await triggerAutomation({
     shopId,
     contactId,
@@ -226,7 +278,11 @@ export async function triggerOrderFulfilled({ shopId, contactId, orderData = {} 
 /**
  * Trigger customer re-engagement automation
  */
-export async function triggerCustomerReengagement({ shopId, contactId, reengagementData = {} }) {
+export async function triggerCustomerReengagement({
+  shopId,
+  contactId,
+  reengagementData = {},
+}) {
   return await triggerAutomation({
     shopId,
     contactId,
@@ -238,7 +294,11 @@ export async function triggerCustomerReengagement({ shopId, contactId, reengagem
 /**
  * Trigger birthday automation
  */
-export async function triggerBirthdayOffer({ shopId, contactId, birthdayData = {} }) {
+export async function triggerBirthdayOffer({
+  shopId,
+  contactId,
+  birthdayData = {},
+}) {
   return await triggerAutomation({
     shopId,
     contactId,
@@ -335,8 +395,13 @@ export async function processDailyBirthdayAutomations() {
       const shopTimezone = contact.shop.settings?.timezone || 'UTC';
 
       // Get today's date in shop timezone
-      const todayInShopTimezone = new Date(new Date().toLocaleString('en-US', { timeZone: shopTimezone }));
-      const todayMonth = String(todayInShopTimezone.getMonth() + 1).padStart(2, '0');
+      const todayInShopTimezone = new Date(
+        new Date().toLocaleString('en-US', { timeZone: shopTimezone }),
+      );
+      const todayMonth = String(todayInShopTimezone.getMonth() + 1).padStart(
+        2,
+        '0',
+      );
       const todayDay = String(todayInShopTimezone.getDate()).padStart(2, '0');
 
       // Get birthday date (stored as Date, extract month and day)
@@ -344,7 +409,8 @@ export async function processDailyBirthdayAutomations() {
       const birthMonth = String(birthDate.getMonth() + 1).padStart(2, '0');
       const birthDay = String(birthDate.getDate()).padStart(2, '0');
 
-      const isBirthdayToday = birthMonth === todayMonth && birthDay === todayDay;
+      const isBirthdayToday =
+        birthMonth === todayMonth && birthDay === todayDay;
 
       if (isBirthdayToday) {
         logger.debug('Contact has birthday today', {
@@ -359,7 +425,9 @@ export async function processDailyBirthdayAutomations() {
       return isBirthdayToday;
     });
 
-    logger.info(`Found ${birthdayContacts.length} contacts with birthday today`);
+    logger.info(
+      `Found ${birthdayContacts.length} contacts with birthday today`,
+    );
 
     const results = {
       total: birthdayContacts.length,
@@ -373,7 +441,10 @@ export async function processDailyBirthdayAutomations() {
     for (const contact of birthdayContacts) {
       try {
         // Check if shop has active birthday automation
-        if (!contact.shop.userAutomations || contact.shop.userAutomations.length === 0) {
+        if (
+          !contact.shop.userAutomations ||
+          contact.shop.userAutomations.length === 0
+        ) {
           logger.info('No active birthday automation for shop', {
             shopId: contact.shopId,
             contactId: contact.id,

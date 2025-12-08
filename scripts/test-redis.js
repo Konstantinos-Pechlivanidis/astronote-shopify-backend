@@ -10,7 +10,12 @@ console.log('Configuration:');
 console.log('- Host:', process.env.REDIS_HOST || 'Not set');
 console.log('- Port:', process.env.REDIS_PORT || 'Not set');
 console.log('- Username:', process.env.REDIS_USERNAME || 'Not set');
-console.log('- Password:', process.env.REDIS_PASSWORD ? `***${process.env.REDIS_PASSWORD.slice(-4)}` : 'Not set');
+console.log(
+  '- Password:',
+  process.env.REDIS_PASSWORD
+    ? `***${process.env.REDIS_PASSWORD.slice(-4)}`
+    : 'Not set'
+);
 console.log('- TLS:', process.env.REDIS_TLS || 'Not set');
 console.log('');
 
@@ -28,7 +33,7 @@ const redis = new IORedis({
   // Keep alive
   keepAlive: 30000,
   // Retry strategy
-  retryStrategy: (times) => {
+  retryStrategy: times => {
     console.log(`⏳ Retry attempt ${times}...`);
     if (times > 3) {
       console.log('❌ Max retry attempts reached');
@@ -47,7 +52,7 @@ redis.on('ready', () => {
   console.log('✅ Redis connection ready!');
 });
 
-redis.on('error', (err) => {
+redis.on('error', err => {
   console.error('❌ Redis error:', err.message);
 });
 
@@ -90,7 +95,6 @@ async function testRedis() {
 
     console.log('\n✅ All tests passed!');
     console.log('\n✨ Redis connection is working correctly');
-
   } catch (error) {
     console.error('\n❌ Test failed:', error.message);
     console.error('\n📋 Troubleshooting:');
@@ -117,4 +121,3 @@ setTimeout(() => {
   redis.disconnect();
   process.exit(1);
 }, 30000);
-

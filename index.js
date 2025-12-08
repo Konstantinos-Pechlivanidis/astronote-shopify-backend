@@ -5,7 +5,11 @@ import { logger } from './utils/logger.js';
 import { validateAndLogEnvironment } from './config/env-validation.js';
 import { closeRedisConnections } from './config/redis.js';
 import './queue/worker.js'; // starts BullMQ worker
-import { startPeriodicStatusUpdates, startScheduledCampaignsProcessor, startBirthdayAutomationScheduler } from './services/scheduler.js';
+import {
+  startPeriodicStatusUpdates,
+  startScheduledCampaignsProcessor,
+  startBirthdayAutomationScheduler,
+} from './services/scheduler.js';
 import { startEventPoller } from './workers/event-poller.js';
 
 // Validate environment variables on startup
@@ -41,7 +45,7 @@ const server = app.listen(PORT, () => {
 });
 
 // Graceful shutdown handler
-const gracefulShutdown = async (signal) => {
+const gracefulShutdown = async signal => {
   logger.info(`Received ${signal}, starting graceful shutdown...`);
 
   // Stop accepting new requests
@@ -77,8 +81,11 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Handle uncaught exceptions
-process.on('uncaughtException', (error) => {
-  logger.error('Uncaught exception', { error: error.message, stack: error.stack });
+process.on('uncaughtException', error => {
+  logger.error('Uncaught exception', {
+    error: error.message,
+    stack: error.stack,
+  });
   gracefulShutdown('uncaughtException');
 });
 

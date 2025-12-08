@@ -7,7 +7,7 @@ import { getStoreId } from './store-resolution.js';
  */
 
 // Key generator for per-store rate limiting
-const storeKeyGenerator = (req) => {
+const storeKeyGenerator = req => {
   try {
     const storeId = getStoreId(req);
     return `store:${storeId}`;

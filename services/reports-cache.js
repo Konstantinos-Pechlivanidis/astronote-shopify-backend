@@ -50,7 +50,11 @@ export async function getCachedReport(storeId, reportType, filters = {}) {
 
     return null;
   } catch (error) {
-    logger.error('Failed to get cached report', { storeId, reportType, error: error.message });
+    logger.error('Failed to get cached report', {
+      storeId,
+      reportType,
+      error: error.message,
+    });
     return null;
   }
 }
@@ -69,9 +73,18 @@ export async function cacheReport(storeId, reportType, filters = {}, data) {
     const ttl = CACHE_TTL[reportType.toUpperCase()] || 300;
 
     await cacheRedis.setex(cacheKey, ttl, JSON.stringify(data));
-    logger.info('Report cached successfully', { storeId, reportType, cacheKey, ttl });
+    logger.info('Report cached successfully', {
+      storeId,
+      reportType,
+      cacheKey,
+      ttl,
+    });
   } catch (error) {
-    logger.error('Failed to cache report', { storeId, reportType, error: error.message });
+    logger.error('Failed to cache report', {
+      storeId,
+      reportType,
+      error: error.message,
+    });
   }
 }
 
@@ -91,10 +104,18 @@ export async function invalidateStoreCache(storeId, reportType = null) {
 
     if (keys.length > 0) {
       await cacheRedis.del(...keys);
-      logger.info('Cache invalidated', { storeId, reportType, keysCount: keys.length });
+      logger.info('Cache invalidated', {
+        storeId,
+        reportType,
+        keysCount: keys.length,
+      });
     }
   } catch (error) {
-    logger.error('Failed to invalidate cache', { storeId, reportType, error: error.message });
+    logger.error('Failed to invalidate cache', {
+      storeId,
+      reportType,
+      error: error.message,
+    });
   }
 }
 
@@ -136,9 +157,17 @@ export async function invalidateOnChange(storeId, changeType) {
       await invalidateStoreCache(storeId, reportType);
     }
 
-    logger.info('Cache invalidated on change', { storeId, changeType, invalidateTypes });
+    logger.info('Cache invalidated on change', {
+      storeId,
+      changeType,
+      invalidateTypes,
+    });
   } catch (error) {
-    logger.error('Failed to invalidate cache on change', { storeId, changeType, error: error.message });
+    logger.error('Failed to invalidate cache on change', {
+      storeId,
+      changeType,
+      error: error.message,
+    });
   }
 }
 
@@ -172,7 +201,10 @@ export async function getCacheStats(storeId) {
 
     return stats;
   } catch (error) {
-    logger.error('Failed to get cache stats', { storeId, error: error.message });
+    logger.error('Failed to get cache stats', {
+      storeId,
+      error: error.message,
+    });
     return { totalKeys: 0, keysByType: {}, totalSize: 0 };
   }
 }

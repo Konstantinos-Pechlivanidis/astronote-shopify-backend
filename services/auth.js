@@ -49,7 +49,9 @@ export async function verifyShopifySessionToken(sessionToken) {
     const payload = await api.session.decodeSessionToken(sessionToken);
 
     // Extract shop domain from destination URL
-    const shopDomain = payload.dest?.replace('https://', '').replace('http://', '') || payload.shop;
+    const shopDomain =
+      payload.dest?.replace('https://', '').replace('http://', '') ||
+      payload.shop;
 
     if (!shopDomain) {
       throw new Error('Shop domain not found in session token');
@@ -109,18 +111,25 @@ export async function generateAppToken(shopDomain) {
         lastError = dbError;
         retries--;
 
-        if ((dbError.message?.includes('closed') ||
-             dbError.message?.includes('connection') ||
-             dbError.code === 'P1001' ||
-             dbError.code === 'P1017') && retries > 0) {
+        if (
+          (dbError.message?.includes('closed') ||
+            dbError.message?.includes('connection') ||
+            dbError.code === 'P1001' ||
+            dbError.code === 'P1017') &&
+          retries > 0
+        ) {
+          logger.warn(
+            'Database connection error in generateAppToken, retrying...',
+            {
+              shopDomain: normalizedDomain,
+              retriesLeft: retries,
+              error: dbError.message,
+            },
+          );
 
-          logger.warn('Database connection error in generateAppToken, retrying...', {
-            shopDomain: normalizedDomain,
-            retriesLeft: retries,
-            error: dbError.message,
-          });
-
-          await new Promise(resolve => setTimeout(resolve, 1000 * (4 - retries)));
+          await new Promise(resolve =>
+            setTimeout(resolve, 1000 * (4 - retries)),
+          );
           continue;
         }
 
@@ -133,7 +142,9 @@ export async function generateAppToken(shopDomain) {
     }
 
     if (!store) {
-      logger.warn('Store not found for token generation', { shopDomain: normalizedDomain });
+      logger.warn('Store not found for token generation', {
+        shopDomain: normalizedDomain,
+      });
       throw new Error('Store not found');
     }
 
@@ -249,4 +260,3 @@ export default {
   verifyAppToken,
   verifyShopifyHmac,
 };
-

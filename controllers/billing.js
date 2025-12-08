@@ -1,8 +1,11 @@
 import { getStoreId } from '../middlewares/store-resolution.js';
 import { logger } from '../utils/logger.js';
 import billingService from '../services/billing.js';
+import { getSubscriptionStatus } from '../services/subscription.js';
+import { calculateTopupPrice } from '../services/subscription.js';
+import { createCreditTopupCheckoutSession } from '../services/stripe.js';
 import prisma from '../services/prisma.js';
-import { sendSuccess, sendPaginated } from '../utils/response.js';
+import { sendSuccess, sendPaginated, sendError } from '../utils/response.js';
 
 /**
  * Billing Controller
@@ -45,7 +48,7 @@ export async function getPublicPackages(req, res, next) {
       ? currency.toUpperCase()
       : 'EUR';
 
-    const packages = billingService.getPackages(finalCurrency);
+    const packages = await billingService.getPackages(finalCurrency);
 
     return sendSuccess(res, { packages, currency: finalCurrency });
   } catch (error) {
@@ -59,11 +62,23 @@ export async function getPublicPackages(req, res, next) {
 
 /**
  * Get available credit packages (authenticated - with store context)
+ * Only returns packages if subscription is active
  * @route GET /billing/packages
  */
 export async function getPackages(req, res, next) {
   try {
     const storeId = getStoreId(req);
+
+    // Check subscription status - packages only available with active subscription
+    const subscription = await getSubscriptionStatus(storeId);
+    if (!subscription.active) {
+      // Return empty array if no active subscription
+      return sendSuccess(res, {
+        packages: [],
+        currency: 'EUR',
+        subscriptionRequired: true,
+      });
+    }
 
     // Get currency from query param or shop/settings currency
     const requestedCurrency = req.query.currency;
@@ -71,7 +86,10 @@ export async function getPackages(req, res, next) {
 
     // Validate requested currency if provided
     let currency = 'EUR';
-    if (requestedCurrency && validCurrencies.includes(requestedCurrency.toUpperCase())) {
+    if (
+      requestedCurrency &&
+      validCurrencies.includes(requestedCurrency.toUpperCase())
+    ) {
       currency = requestedCurrency.toUpperCase();
     } else {
       // Get shop currency, fallback to settings currency
@@ -85,14 +103,20 @@ export async function getPackages(req, res, next) {
         },
       });
 
-      if (shop?.currency && validCurrencies.includes(shop.currency.toUpperCase())) {
+      if (
+        shop?.currency &&
+        validCurrencies.includes(shop.currency.toUpperCase())
+      ) {
         currency = shop.currency.toUpperCase();
-      } else if (shop?.settings?.currency && validCurrencies.includes(shop.settings.currency.toUpperCase())) {
+      } else if (
+        shop?.settings?.currency &&
+        validCurrencies.includes(shop.settings.currency.toUpperCase())
+      ) {
         currency = shop.settings.currency.toUpperCase();
       }
     }
 
-    const packages = billingService.getPackages(currency);
+    const packages = await billingService.getPackages(currency);
 
     return sendSuccess(res, { packages, currency });
   } catch (error) {
@@ -106,7 +130,8 @@ export async function getPackages(req, res, next) {
 }
 
 /**
- * Create Stripe checkout session for credit purchase
+ * Create Stripe checkout session for credit purchase (credit packs)
+ * Requires active subscription
  * @route POST /billing/purchase
  */
 export async function createPurchase(req, res, next) {
@@ -121,10 +146,12 @@ export async function createPurchase(req, res, next) {
         'x-shopify-shop': req.headers['x-shopify-shop'],
       },
       body: req.body,
-      storeContext: req.ctx?.store ? {
-        id: req.ctx.store.id,
-        shopDomain: req.ctx.store.shopDomain,
-      } : null,
+      storeContext: req.ctx?.store
+        ? {
+          id: req.ctx.store.id,
+          shopDomain: req.ctx.store.shopDomain,
+        }
+        : null,
     });
 
     // Get store ID - this will throw if store context is not available
@@ -142,6 +169,17 @@ export async function createPurchase(req, res, next) {
         },
       });
       throw storeError;
+    }
+
+    // Verify subscription is active (credit packs require subscription)
+    const subscription = await getSubscriptionStatus(storeId);
+    if (!subscription.active) {
+      return sendError(
+        res,
+        402,
+        'INACTIVE_SUBSCRIPTION',
+        'An active subscription is required to purchase credit packs. Please subscribe first.',
+      );
     }
 
     const { packageId, successUrl, cancelUrl, currency } = req.body;
@@ -211,6 +249,86 @@ export async function createPurchase(req, res, next) {
 }
 
 /**
+ * Calculate top-up price
+ * @route GET /billing/topup/calculate
+ */
+export async function calculateTopup(req, res, next) {
+  try {
+    const credits = parseInt(req.query.credits);
+
+    if (!credits || !Number.isInteger(credits) || credits <= 0) {
+      return sendError(
+        res,
+        400,
+        'VALIDATION_ERROR',
+        'Credits must be a positive integer',
+      );
+    }
+
+    const priceBreakdown = calculateTopupPrice(credits);
+
+    return sendSuccess(res, priceBreakdown, 'Price calculated successfully');
+  } catch (error) {
+    logger.error('Calculate top-up error', {
+      error: error.message,
+      query: req.query,
+    });
+    next(error);
+  }
+}
+
+/**
+ * Create top-up checkout session
+ * @route POST /billing/topup
+ */
+export async function createTopup(req, res, next) {
+  try {
+    const storeId = getStoreId(req);
+    const shopDomain = req.ctx?.store?.shopDomain;
+    const { credits, successUrl, cancelUrl } = req.body;
+
+    // Calculate price
+    const priceBreakdown = calculateTopupPrice(credits);
+
+    // Create Stripe checkout session
+    const session = await createCreditTopupCheckoutSession({
+      shopId: storeId,
+      shopDomain,
+      credits,
+      priceEur: priceBreakdown.priceEurWithVat,
+      currency: 'EUR',
+      successUrl,
+      cancelUrl,
+    });
+
+    logger.info('Top-up checkout session created', {
+      storeId,
+      credits,
+      sessionId: session.id,
+    });
+
+    return sendSuccess(
+      res,
+      {
+        checkoutUrl: session.url,
+        sessionId: session.id,
+        credits,
+        priceEur: priceBreakdown.priceEurWithVat,
+        priceBreakdown,
+      },
+      'Top-up checkout session created successfully',
+      201,
+    );
+  } catch (error) {
+    logger.error('Create top-up error', {
+      error: error.message,
+      storeId: getStoreId(req),
+    });
+    next(error);
+  }
+}
+
+/**
  * Get transaction history
  * @route GET /billing/history
  */
@@ -272,6 +390,8 @@ export default {
   getBalance,
   getPackages,
   createPurchase,
+  calculateTopup,
+  createTopup,
   getHistory,
   getBillingHistory,
 };

@@ -9,6 +9,7 @@ All scheduled campaigns functionality has been implemented and tested. The appli
 ## 📋 Feature Summary
 
 ### Scheduled Campaigns Flow
+
 1. **User schedules campaign** → Frontend converts shop timezone to UTC
 2. **Backend stores** → `scheduleAt` stored in UTC, status set to `'scheduled'`
 3. **Scheduler runs** → Checks every minute for due campaigns
@@ -23,24 +24,28 @@ All scheduled campaigns functionality has been implemented and tested. The appli
 ### Core Components
 
 #### 1. Scheduler Service (`services/scheduler.js`)
+
 - ✅ `processScheduledCampaigns()` - Finds and queues due campaigns
 - ✅ `startScheduledCampaignsProcessor()` - Runs every minute
 - ✅ Transaction-based status updates (prevents duplicates)
 - ✅ Error handling with status reversion
 
 #### 2. Campaign Worker (`queue/jobs/campaignSend.js`)
+
 - ✅ `handleCampaignSend()` - Executes scheduled campaigns
 - ✅ Validates campaign state before sending
 - ✅ Calls `sendCampaign()` service
 - ✅ Error handling with retry logic
 
 #### 3. Campaign Service (`services/campaigns.js`)
+
 - ✅ `sendCampaign()` - Accepts `'draft'`, `'scheduled'`, and `'sending'` status
 - ✅ `listCampaigns()` - Calculates recipient counts for scheduled campaigns
 - ✅ `getCampaignById()` - Calculates recipient counts for scheduled campaigns
 - ✅ Recipient calculation based on audience (contacts/segments)
 
 #### 4. Startup (`index.js`)
+
 - ✅ `startScheduledCampaignsProcessor()` called on server startup
 - ✅ Initial 30-second delay for app initialization
 - ✅ Runs every 60 seconds
@@ -52,6 +57,7 @@ All scheduled campaigns functionality has been implemented and tested. The appli
 ### Core Components
 
 #### 1. Campaign Creation (`frontend/src/pages/app/CampaignCreate.jsx`)
+
 - ✅ Custom date picker (`GlassDateTimePicker`)
 - ✅ Separate time picker modal (`GlassTimePicker`)
 - ✅ Timezone conversion (`convertShopTimeToUTC`)
@@ -61,12 +67,14 @@ All scheduled campaigns functionality has been implemented and tested. The appli
 - ✅ Display time in shop timezone with timezone label
 
 #### 2. Timezone Utilities (`frontend/src/utils/timezone.js`)
+
 - ✅ `convertShopTimeToUTC()` - Converts user selection to UTC
 - ✅ `convertUTCToShopTime()` - Converts UTC to shop timezone for display
 - ✅ Handles all IANA timezones
 - ✅ Fallback error handling
 
 #### 3. UI Components
+
 - ✅ `GlassDateTimePicker` - Modal-based, centered, with backdrop
 - ✅ `GlassTimePicker` - Separate modal, Save button, no auto-close
 - ✅ `GlassSelectCustom` - Fixed error handling, stable on scroll
@@ -77,6 +85,7 @@ All scheduled campaigns functionality has been implemented and tested. The appli
 ## ✅ Production Checklist
 
 ### Backend
+
 - [x] Scheduler implemented and started on server startup
 - [x] Campaign worker processes scheduled campaigns
 - [x] Recipient counts calculated correctly for scheduled campaigns
@@ -87,6 +96,7 @@ All scheduled campaigns functionality has been implemented and tested. The appli
 - [x] Logging implemented for debugging
 
 ### Frontend
+
 - [x] Custom date and time pickers implemented
 - [x] Timezone conversion working correctly
 - [x] Validation implemented
@@ -98,6 +108,7 @@ All scheduled campaigns functionality has been implemented and tested. The appli
 - [x] Build successful
 
 ### Integration
+
 - [x] Frontend converts shop timezone to UTC before API call
 - [x] Backend stores scheduleAt in UTC
 - [x] Scheduler checks UTC time correctly
@@ -110,6 +121,7 @@ All scheduled campaigns functionality has been implemented and tested. The appli
 ## 🧪 Testing Scenarios
 
 ### Test Case 1: Send Now (Baseline)
+
 1. Create campaign
 2. Click "Send Now"
 3. ✅ Campaign sends immediately
@@ -117,6 +129,7 @@ All scheduled campaigns functionality has been implemented and tested. The appli
 5. ✅ Status shows as "Sent"
 
 ### Test Case 2: Schedule Campaign (Same Timezone)
+
 1. Set timezone to UTC in Settings
 2. Create campaign
 3. Schedule for 2 minutes in the future
@@ -128,6 +141,7 @@ All scheduled campaigns functionality has been implemented and tested. The appli
 9. ✅ Status updates to "Sent"
 
 ### Test Case 3: Schedule Campaign (Different Timezone)
+
 1. Set timezone to `America/New_York` (EST, UTC-5) in Settings
 2. Create campaign
 3. Schedule for 2:00 PM EST (7:00 PM UTC)
@@ -137,11 +151,13 @@ All scheduled campaigns functionality has been implemented and tested. The appli
 7. ✅ Recipients receive SMS at correct local time
 
 ### Test Case 4: Recipient Count Display
+
 1. Create scheduled campaign with audience "all"
 2. ✅ Recipient count shows correct number (not 0)
 3. ✅ After sending, count matches actual recipients
 
 ### Test Case 5: Time Picker UX
+
 1. Click "Schedule for later"
 2. Click "Select Time"
 3. Select hour → ✅ Modal stays open
@@ -154,12 +170,14 @@ All scheduled campaigns functionality has been implemented and tested. The appli
 ## 🔍 Environment Requirements
 
 ### Required Environment Variables
+
 - `DATABASE_URL` - PostgreSQL connection
 - `REDIS_HOST`, `REDIS_PORT`, `REDIS_USERNAME`, `REDIS_PASSWORD` - For queue system
 - `MITTO_API_KEY`, `MITTO_API_BASE`, `MITTO_TRAFFIC_ACCOUNT_ID` - For SMS sending
 - `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET` - For Shopify integration
 
 ### Optional (for production)
+
 - `LOG_LEVEL` - Logging level (default: 'info')
 - `NODE_ENV` - Environment (production/development/test)
 
@@ -170,16 +188,19 @@ All scheduled campaigns functionality has been implemented and tested. The appli
 ### Key Log Messages to Monitor
 
 #### Scheduler
+
 - `"Scheduled campaigns processor started"` - Confirms scheduler is running
 - `"Found due scheduled campaigns"` - When campaigns are found
 - `"Queued scheduled campaign for execution"` - When campaign is queued
 
 #### Campaign Worker
+
 - `"Processing campaign send job"` - When worker starts processing
 - `"Campaign send job completed"` - When campaign is successfully sent
 - `"Campaign send job failed"` - When campaign fails (check logs for reason)
 
 #### Campaign Service
+
 - `"Sending campaign"` - When sendCampaign is called
 - `"Campaign queued for sending"` - When SMS jobs are queued
 - `"Campaign scheduled successfully"` - When campaign is scheduled
@@ -189,10 +210,12 @@ All scheduled campaigns functionality has been implemented and tested. The appli
 ## 🚨 Known Issues & Limitations
 
 ### Non-Blocking Issues
+
 1. **Backend Lint**: 5 pre-existing errors in unrelated files (`controllers/automation-webhooks.js`, `services/webhook-registration.js`)
 2. **Frontend Lint**: 1 non-blocking warning (`placeholder` variable in `GlassDateTimePicker.jsx`)
 
 ### Limitations
+
 1. **Scheduler Interval**: Checks every 60 seconds (not real-time)
    - Campaigns may execute up to 60 seconds after scheduled time
    - This is acceptable for most use cases
@@ -205,6 +228,7 @@ All scheduled campaigns functionality has been implemented and tested. The appli
 ## 🎯 Production Deployment Steps
 
 ### 1. Backend Deployment
+
 ```bash
 # Ensure all environment variables are set
 # Verify Redis connection
@@ -218,6 +242,7 @@ npm start
 ```
 
 ### 2. Frontend Deployment
+
 ```bash
 # Build for production
 npm run build
@@ -226,6 +251,7 @@ npm run build
 ```
 
 ### 3. Verification
+
 1. Check server logs for: `"Scheduled campaigns processor started"`
 2. Create a test scheduled campaign
 3. Verify it appears in campaigns list with correct status
@@ -237,6 +263,7 @@ npm run build
 ## 📝 Code Quality
 
 ### Backend
+
 - ✅ All scheduled campaigns code follows project patterns
 - ✅ Error handling implemented
 - ✅ Logging implemented
@@ -244,6 +271,7 @@ npm run build
 - ✅ Input validation (Zod schemas)
 
 ### Frontend
+
 - ✅ React best practices
 - ✅ Error boundaries
 - ✅ Loading states
@@ -257,6 +285,7 @@ npm run build
 **Status**: ✅ **PRODUCTION READY**
 
 All scheduled campaigns functionality has been:
+
 - ✅ Implemented
 - ✅ Tested
 - ✅ Linted
@@ -264,6 +293,7 @@ All scheduled campaigns functionality has been:
 - ✅ Documented
 
 The application is ready for live testing. All core features work as expected:
+
 - Custom date/time pickers
 - Timezone conversion
 - Scheduled campaign execution
@@ -272,4 +302,3 @@ The application is ready for live testing. All core features work as expected:
 - Error handling
 
 **Next Steps**: Deploy to production and perform live testing with real campaigns.
-

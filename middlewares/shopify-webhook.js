@@ -23,7 +23,8 @@ function verifyShopifyWebhookSignature(req) {
   }
 
   // Get the webhook secret from environment
-  const webhookSecret = process.env.SHOPIFY_WEBHOOK_SECRET || process.env.SHOPIFY_API_SECRET;
+  const webhookSecret =
+    process.env.SHOPIFY_WEBHOOK_SECRET || process.env.SHOPIFY_API_SECRET;
 
   if (!webhookSecret) {
     logger.error('Shopify webhook secret not configured', {
@@ -32,7 +33,9 @@ function verifyShopifyWebhookSignature(req) {
     });
     // In development, allow webhooks if secret is not set (for testing)
     if (process.env.NODE_ENV === 'development') {
-      logger.warn('Allowing webhook in development mode (no secret configured)');
+      logger.warn(
+        'Allowing webhook in development mode (no secret configured)',
+      );
       return true;
     }
     return false;
@@ -144,4 +147,3 @@ export default {
   validateShopifyWebhook,
   verifyShopifyWebhookSignature,
 };
-

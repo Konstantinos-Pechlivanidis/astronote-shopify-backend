@@ -13,11 +13,14 @@ import 'dotenv/config';
 
 async function updateAccessToken() {
   try {
-    const shopDomain = process.env.SHOPIFY_SHOP_DOMAIN || 'sms-blossom-dev.myshopify.com';
+    const shopDomain =
+      process.env.SHOPIFY_SHOP_DOMAIN || 'sms-blossom-dev.myshopify.com';
     const accessToken = process.env.SHOPIFY_ACCESS_TOKEN;
 
     if (!accessToken) {
-      console.error('❌ ERROR: SHOPIFY_ACCESS_TOKEN not found in environment variables');
+      console.error(
+        '❌ ERROR: SHOPIFY_ACCESS_TOKEN not found in environment variables'
+      );
       console.log('\n📋 Steps to fix:');
       console.log('1. Get full access token from Shopify Debug Information');
       console.log('2. Add to .env file:');
@@ -67,7 +70,10 @@ async function updateAccessToken() {
     console.log('\n📊 Shop Details:');
     console.log('- ID:', shop.id);
     console.log('- Domain:', shop.shopDomain);
-    console.log('- Access Token:', `${shop.accessToken.substring(0, 10)}...${shop.accessToken.slice(-4)}`);
+    console.log(
+      '- Access Token:',
+      `${shop.accessToken.substring(0, 10)}...${shop.accessToken.slice(-4)}`
+    );
     console.log('- Credits:', shop.credits);
     console.log('- Active:', shop.isActive);
 
@@ -75,7 +81,6 @@ async function updateAccessToken() {
     console.log('\n🧪 Test with:');
     console.log('  curl http://localhost:3000/discounts \\');
     console.log(`    -H "X-Shopify-Shop-Domain: ${shopDomain}"`);
-
   } catch (error) {
     console.error('❌ Error updating access token:', error.message);
     console.error('\nFull error:', error);
@@ -86,4 +91,3 @@ async function updateAccessToken() {
 }
 
 updateAccessToken();
-

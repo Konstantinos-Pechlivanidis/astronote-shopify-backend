@@ -18,7 +18,10 @@ export function generateUnsubscribeToken(contactId, shopId, phoneE164) {
   };
 
   // Create a signed token using HMAC
-  const secret = process.env.UNSUBSCRIBE_SECRET || process.env.JWT_SECRET || 'default-secret-change-in-production';
+  const secret =
+    process.env.UNSUBSCRIBE_SECRET ||
+    process.env.JWT_SECRET ||
+    'default-secret-change-in-production';
   const payloadString = JSON.stringify(payload);
   const signature = crypto
     .createHmac('sha256', secret)
@@ -41,23 +44,32 @@ export function verifyUnsubscribeToken(token) {
     const [payloadBase64, signature] = token.split('.');
 
     if (!payloadBase64 || !signature) {
-      logger.warn('Invalid unsubscribe token format', { token: `${token.substring(0, 20)}...` });
+      logger.warn('Invalid unsubscribe token format', {
+        token: `${token.substring(0, 20)}...`,
+      });
       return null;
     }
 
     // Decode payload
-    const payloadString = Buffer.from(payloadBase64, 'base64url').toString('utf-8');
+    const payloadString = Buffer.from(payloadBase64, 'base64url').toString(
+      'utf-8',
+    );
     const payload = JSON.parse(payloadString);
 
     // Verify signature
-    const secret = process.env.UNSUBSCRIBE_SECRET || process.env.JWT_SECRET || 'default-secret-change-in-production';
+    const secret =
+      process.env.UNSUBSCRIBE_SECRET ||
+      process.env.JWT_SECRET ||
+      'default-secret-change-in-production';
     const expectedSignature = crypto
       .createHmac('sha256', secret)
       .update(payloadString)
       .digest('hex');
 
     if (signature !== expectedSignature) {
-      logger.warn('Invalid unsubscribe token signature', { token: `${token.substring(0, 20)}...` });
+      logger.warn('Invalid unsubscribe token signature', {
+        token: `${token.substring(0, 20)}...`,
+      });
       return null;
     }
 
@@ -105,9 +117,20 @@ export function generateUnsubscribeUrl(contactId, shopId, phoneE164, baseUrl) {
  * @param {string} baseUrl - Base URL for the frontend
  * @returns {string} Message with unsubscribe link appended
  */
-export function appendUnsubscribeLink(message, contactId, shopId, phoneE164, baseUrl) {
+export function appendUnsubscribeLink(
+  message,
+  contactId,
+  shopId,
+  phoneE164,
+  baseUrl,
+) {
   // Generate unsubscribe URL
-  const unsubscribeUrl = generateUnsubscribeUrl(contactId, shopId, phoneE164, baseUrl);
+  const unsubscribeUrl = generateUnsubscribeUrl(
+    contactId,
+    shopId,
+    phoneE164,
+    baseUrl,
+  );
 
   // Shorten URL if needed (SMS messages have character limits)
   // For now, we'll use the full URL. In production, you might want to use a URL shortener
@@ -126,4 +149,3 @@ export function appendUnsubscribeLink(message, contactId, shopId, phoneE164, bas
 
   return message + unsubscribeText;
 }
-

@@ -121,7 +121,9 @@ export async function getShopifySession(shopDomain) {
 function getGraphQLClient(api) {
   if (!api) {
     logger.error('Shopify API not initialized');
-    throw new Error('Shopify API not initialized. Please check API configuration.');
+    throw new Error(
+      'Shopify API not initialized. Please check API configuration.',
+    );
   }
 
   // Check for GraphQL client in different possible locations
@@ -143,7 +145,9 @@ function getGraphQLClient(api) {
       apiKeys: api ? Object.keys(api) : [],
       clientsKeys: api && api.clients ? Object.keys(api.clients) : [],
     });
-    throw new Error('Shopify API GraphQL client not available. Please check API initialization.');
+    throw new Error(
+      'Shopify API GraphQL client not available. Please check API initialization.',
+    );
   }
 
   return GraphqlClient;
@@ -208,7 +212,9 @@ function normalizeDiscountData(node, discount) {
   }
 
   // Check if expired
-  const isExpired = discount.endsAt ? new Date(discount.endsAt) < new Date() : false;
+  const isExpired = discount.endsAt
+    ? new Date(discount.endsAt) < new Date()
+    : false;
 
   return {
     id: node.id,
@@ -341,7 +347,9 @@ export async function getDiscountCodes(shopDomain) {
 
     // Check for GraphQL errors in response
     if (response.body.errors && response.body.errors.length > 0) {
-      const graphqlErrors = response.body.errors.map(err => err.message).join('; ');
+      const graphqlErrors = response.body.errors
+        .map(err => err.message)
+        .join('; ');
       logger.error('Shopify GraphQL errors in getDiscountCodes', {
         shopDomain,
         errors: response.body.errors,
@@ -360,11 +368,13 @@ export async function getDiscountCodes(shopDomain) {
     }
 
     // Normalize discount data to a consistent structure
-    const discountCodes = response.body.data.codeDiscountNodes.edges.map(edge => {
-      const node = edge.node;
-      const discount = node.codeDiscount;
-      return normalizeDiscountData(node, discount);
-    });
+    const discountCodes = response.body.data.codeDiscountNodes.edges.map(
+      edge => {
+        const node = edge.node;
+        const discount = node.codeDiscount;
+        return normalizeDiscountData(node, discount);
+      },
+    );
 
     logger.info('Discount codes retrieved', {
       shopDomain,
@@ -471,7 +481,9 @@ export async function getDiscountCode(shopDomain, discountId) {
 
     // Check for GraphQL errors in response
     if (response.body.errors && response.body.errors.length > 0) {
-      const graphqlErrors = response.body.errors.map(err => err.message).join('; ');
+      const graphqlErrors = response.body.errors
+        .map(err => err.message)
+        .join('; ');
       logger.error('Shopify GraphQL errors in getDiscountCode', {
         shopDomain,
         discountId,

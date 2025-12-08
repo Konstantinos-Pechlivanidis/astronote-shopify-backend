@@ -84,7 +84,10 @@ export async function create(req, res, next) {
       hasScheduleAt: !!campaignData.scheduleAt,
     });
 
-    const campaign = await campaignsService.createCampaign(storeId, campaignData);
+    const campaign = await campaignsService.createCampaign(
+      storeId,
+      campaignData,
+    );
 
     return sendCreated(res, campaign, 'Campaign created successfully');
   } catch (error) {
@@ -110,7 +113,11 @@ export async function update(req, res, next) {
     const { id } = req.params;
     const campaignData = req.body;
 
-    const campaign = await campaignsService.updateCampaign(storeId, id, campaignData);
+    const campaign = await campaignsService.updateCampaign(
+      storeId,
+      id,
+      campaignData,
+    );
 
     return sendSuccess(res, campaign, 'Campaign updated successfully');
   } catch (error) {
@@ -216,7 +223,11 @@ export async function schedule(req, res, next) {
     const { id } = req.params;
     const scheduleData = req.body;
 
-    const campaign = await campaignsService.scheduleCampaign(storeId, id, scheduleData);
+    const campaign = await campaignsService.scheduleCampaign(
+      storeId,
+      id,
+      scheduleData,
+    );
 
     return sendSuccess(res, campaign, 'Campaign scheduled successfully'); // ✅ Return campaign directly for test compatibility
   } catch (error) {
@@ -318,8 +329,11 @@ export async function updateDeliveryStatus(req, res, next) {
   try {
     const { id } = req.params;
 
-    const deliveryStatusService = await import('../services/delivery-status.js');
-    const result = await deliveryStatusService.updateCampaignDeliveryStatuses(id);
+    const deliveryStatusService = await import(
+      '../services/delivery-status.js'
+    );
+    const result =
+      await deliveryStatusService.updateCampaignDeliveryStatuses(id);
 
     return sendSuccess(res, result, 'Delivery status updated successfully');
   } catch (error) {

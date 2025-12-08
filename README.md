@@ -44,6 +44,7 @@ npm start
 ## 🔧 Environment Variables
 
 **Required:**
+
 - `DATABASE_URL` - PostgreSQL connection string
 - `SHOPIFY_API_KEY` - Shopify API key
 - `SHOPIFY_API_SECRET` - Shopify API secret
@@ -71,12 +72,14 @@ npm start
 All store-scoped endpoints require the `X-Shopify-Shop-Domain` header.
 
 ### Core Endpoints
+
 - `GET /` - API status and info
 - `GET /health` - Health check
 - `GET /health/full` - Comprehensive health check
 - `GET /metrics` - Application metrics
 
 ### Main Features
+
 - **Dashboard** - Overview and statistics
 - **Contacts** - Customer contact management with GDPR-compliant opt-in/opt-out
 - **Campaigns** - SMS campaign creation, scheduling, and management
@@ -146,6 +149,7 @@ Import the provided Postman collection and environment:
 The `render.yaml` file contains the deployment configuration.
 
 **Important:** Ensure the following environment variables are set in Render:
+
 - `DATABASE_URL` - PostgreSQL connection string
 - `REDIS_HOST`, `REDIS_PORT`, `REDIS_USERNAME`, `REDIS_PASSWORD` - Redis configuration
 - `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET` - Shopify credentials
@@ -202,6 +206,7 @@ npm run db:push
 ### Multi-Store Support
 
 The backend supports multiple Shopify stores:
+
 - Each store has isolated data
 - Store context is resolved from the `X-Shopify-Shop-Domain` header
 - Automatic store creation on first request
@@ -209,6 +214,7 @@ The backend supports multiple Shopify stores:
 ## 💳 Billing System
 
 The app uses a credit-based billing system:
+
 - Credits are purchased via Stripe
 - Available packages: 1,000 / 5,000 / 10,000 / 25,000 credits
 - Each SMS costs 1 credit
@@ -218,6 +224,7 @@ The app uses a credit-based billing system:
 ## 🤖 Background Jobs
 
 BullMQ handles background processing:
+
 - **SMS Sending Queue** - Processes campaign and automation SMS messages
 - **Automation Triggers** - Event-based automation execution (order placed, fulfilled, etc.)
 - **Scheduled Campaigns** - Processes campaigns scheduled for future delivery
@@ -233,6 +240,7 @@ BullMQ handles background processing:
 - **Health Checks** - `GET /health` (basic) and `GET /health/full` (comprehensive)
 
 ### Log Files
+
 - `logs/app.log` - General application logs
 - `logs/error.log` - Error logs only
 - `logs/debug.log` - Debug logs (when LOG_LEVEL=debug)
@@ -240,6 +248,7 @@ BullMQ handles background processing:
 ## 🐛 Troubleshooting
 
 ### Server won't start
+
 - Check environment variables are set correctly (`npm run` will validate on startup)
 - Verify database connection (check `DATABASE_URL` format)
 - Ensure Redis is accessible (test with `npm run test:redis`)
@@ -247,6 +256,7 @@ BullMQ handles background processing:
 - Verify all required environment variables are present
 
 ### SMS not sending
+
 - Verify Mitto API credentials (`MITTO_API_KEY`, `MITTO_TRAFFIC_ACCOUNT_ID`)
 - Check sufficient credit balance in database
 - Review error logs in `logs/error.log`
@@ -254,6 +264,7 @@ BullMQ handles background processing:
 - Check queue worker is running (should see logs on startup)
 
 ### Automation not triggering
+
 - Verify automation status is `active`
 - Check event poller is running (check startup logs)
 - Review automation trigger configuration
@@ -261,12 +272,14 @@ BullMQ handles background processing:
 - Verify Shopify webhooks are registered
 
 ### Database issues
+
 - Run `npm run db:status` to check migration status
 - Run `npm run db:migrate` to apply pending migrations
 - Check `DATABASE_URL` format (must include connection pooling for production)
 - Verify database is accessible from deployment environment
 
 ### Scheduled campaigns not executing
+
 - Verify scheduler is started (check logs for "Scheduled campaigns processor started")
 - Check campaign `scheduleAt` is in UTC format
 - Verify campaign status is `scheduled`

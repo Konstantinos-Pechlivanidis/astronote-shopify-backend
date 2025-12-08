@@ -178,7 +178,10 @@ export async function getTemplateCategories(req, res, next) {
       orderBy: { category: 'asc' },
     });
 
-    return sendSuccess(res, categories.map(c => c.category));
+    return sendSuccess(
+      res,
+      categories.map(c => c.category),
+    );
   } catch (error) {
     logger.error('Failed to fetch template categories', {
       error: error.message,
@@ -208,7 +211,9 @@ export async function trackTemplateUsage(req, res, next) {
     }
 
     if (!shopId) {
-      throw new ValidationError('Shop context is required to track template usage. Please ensure you are properly authenticated.');
+      throw new ValidationError(
+        'Shop context is required to track template usage. Please ensure you are properly authenticated.',
+      );
     }
 
     // Check if template exists and is public

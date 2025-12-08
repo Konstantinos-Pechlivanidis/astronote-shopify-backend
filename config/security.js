@@ -15,7 +15,7 @@ export const rateLimitConfig = {
     },
     standardHeaders: true,
     legacyHeaders: false,
-    skip: (req) => {
+    skip: req => {
       // Skip rate limiting for health checks
       return req.path === '/health' || req.path === '/health/config';
     },
@@ -112,7 +112,11 @@ export const corsConfig = {
     'X-Shopify-Shop-Domain',
     'X-Shopify-Access-Token',
   ],
-  exposedHeaders: ['X-Request-ID', 'X-Rate-Limit-Remaining', 'X-Rate-Limit-Reset'],
+  exposedHeaders: [
+    'X-Request-ID',
+    'X-Rate-Limit-Remaining',
+    'X-Rate-Limit-Reset',
+  ],
   maxAge: 86400, // 24 hours
 };
 
@@ -148,7 +152,11 @@ export const inputValidation = {
 
   // Validate content type
   validateContentType: (req, res, next) => {
-    if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
+    if (
+      req.method === 'POST' ||
+      req.method === 'PUT' ||
+      req.method === 'PATCH'
+    ) {
       const contentType = req.get('Content-Type');
       if (!contentType || !contentType.includes('application/json')) {
         return res.status(400).json({
@@ -160,16 +168,18 @@ export const inputValidation = {
   },
 
   // Validate request size
-  validateRequestSize: (maxSize = 5 * 1024 * 1024) => (req, res, next) => {
-    const contentLength = parseInt(req.get('Content-Length') || '0');
-    if (contentLength > maxSize) {
-      return res.status(413).json({
-        error: 'Request entity too large.',
-        maxSize: `${maxSize / 1024 / 1024}MB`,
-      });
-    }
-    next();
-  },
+  validateRequestSize:
+    (maxSize = 5 * 1024 * 1024) =>
+      (req, res, next) => {
+        const contentLength = parseInt(req.get('Content-Length') || '0');
+        if (contentLength > maxSize) {
+          return res.status(413).json({
+            error: 'Request entity too large.',
+            maxSize: `${maxSize / 1024 / 1024}MB`,
+          });
+        }
+        next();
+      },
 };
 
 // Security headers middleware
@@ -182,7 +192,10 @@ export const securityHeaders = (req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  res.setHeader(
+    'Permissions-Policy',
+    'geolocation=(), microphone=(), camera=()',
+  );
 
   // Add request ID for tracking
   if (!res.getHeader('X-Request-ID')) {
@@ -254,7 +267,11 @@ export const securityLogger = (req, res, next) => {
     }
 
     // Log potential attacks
-    if (req.url.includes('..') || req.url.includes('<script>') || req.url.includes('javascript:')) {
+    if (
+      req.url.includes('..') ||
+      req.url.includes('<script>') ||
+      req.url.includes('javascript:')
+    ) {
       logger.error('Potential attack detected', logData);
     }
   });

@@ -8,32 +8,44 @@ datasource db {
 }
 
 model Shop {
-  id                  String               @id @default(cuid())
-  shopDomain          String               @unique
-  shopName            String?
-  accessToken         String?
-  status              String               @default("active")
-  country             String?
-  currency            String               @default("EUR")
-  credits             Int                  @default(0)
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
-  automations         UserAutomation[]
-  automationLogs      AutomationLog[]
-  campaigns           Campaign[]
-  contacts            Contact[]
-  discounts           DiscountLink[]
-  messages            MessageLog[]
-  segments            Segment[]
-  templates           TemplateUsage[]
-  wallet              Wallet?
-  transactions        WalletTransaction[]
-  billingTransactions BillingTransaction[]
-  settings            ShopSettings?
+  id                    String                 @id @default(cuid())
+  shopDomain            String                 @unique
+  shopName              String?
+  accessToken           String?
+  status                String                 @default("active")
+  country               String?
+  currency              String                 @default("EUR")
+  credits               Int                    @default(0)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  automations           UserAutomation[]
+  automationLogs        AutomationLog[]
+  campaigns             Campaign[]
+  contacts              Contact[]
+  discounts             DiscountLink[]
+  messages              MessageLog[]
+  segments              Segment[]
+  templates             TemplateUsage[]
+  wallet                Wallet?
+  transactions          WalletTransaction[]
+  creditTransactions    CreditTransaction[]
+  billingTransactions   BillingTransaction[]
+  purchases             Purchase[]
+  settings              ShopSettings?
   eventProcessingStates EventProcessingState[]
+
+  // Subscription fields
+  stripeCustomerId           String?               @db.VarChar(255)
+  stripeSubscriptionId       String?               @db.VarChar(255)
+  planType                   SubscriptionPlanType?
+  subscriptionStatus         SubscriptionStatus    @default(inactive)
+  lastFreeCreditsAllocatedAt DateTime?
 
   @@index([status, createdAt])
   @@index([country])
+  @@index([stripeCustomerId])
+  @@index([stripeSubscriptionId])
+  @@index([subscriptionStatus])
 }
 
 model Contact {
@@ -89,22 +101,23 @@ model SegmentMembership {
 }
 
 model Campaign {
-  id            String              @id @default(cuid())
-  shopId        String
-  name          String
-  message       String
-  audience      String
-  discountId    String?
-  scheduleAt    DateTime?
-  recurringDays Int?
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
-  scheduleType  ScheduleType
-  status        CampaignStatus      @default(draft)
-  shop          Shop                @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  metrics       CampaignMetrics?
-  recipients    CampaignRecipient[]
-  messages      MessageLog[]
+  id                 String              @id @default(cuid())
+  shopId             String
+  name               String
+  message            String
+  audience           String
+  discountId         String?
+  scheduleAt         DateTime?
+  recurringDays      Int?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  scheduleType       ScheduleType
+  status             CampaignStatus      @default(draft)
+  shop               Shop                @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  metrics            CampaignMetrics?
+  recipients         CampaignRecipient[]
+  messages           MessageLog[]
+  creditTransactions CreditTransaction[]
 
   @@unique([shopId, name])
   @@index([shopId, status])
@@ -144,22 +157,23 @@ model CampaignMetrics {
 }
 
 model MessageLog {
-  id             String           @id @default(cuid())
-  shopId         String
-  phoneE164      String
-  provider       String
-  providerMsgId  String?
-  payload        Json?
-  error          String?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  campaignId     String?
-  direction      MessageDirection
-  status         MessageStatus?
-  deliveryStatus String? // Mitto delivery status
-  senderNumber   String? // Sender number used
-  campaign       Campaign?        @relation(fields: [campaignId], references: [id])
-  shop           Shop             @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  id                 String              @id @default(cuid())
+  shopId             String
+  phoneE164          String
+  provider           String
+  providerMsgId      String?
+  payload            Json?
+  error              String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  campaignId         String?
+  direction          MessageDirection
+  status             MessageStatus?
+  deliveryStatus     String? // Mitto delivery status
+  senderNumber       String? // Sender number used
+  campaign           Campaign?           @relation(fields: [campaignId], references: [id])
+  shop               Shop                @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  creditTransactions CreditTransaction[]
 
   @@index([shopId, direction])
   @@index([shopId, status])
@@ -172,15 +186,16 @@ model MessageLog {
 }
 
 model Wallet {
-  id          String   @id @default(cuid())
-  shopId      String   @unique
-  balance     Int      @default(0)
-  totalUsed   Int      @default(0)
-  totalBought Int      @default(0)
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  shop        Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  id                 String              @id @default(cuid())
+  shopId             String              @unique
+  balance            Int                 @default(0)
+  totalUsed          Int                 @default(0)
+  totalBought        Int                 @default(0)
+  active             Boolean             @default(true)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  shop               Shop                @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  creditTransactions CreditTransaction[]
 }
 
 model SmsPackage {
@@ -195,6 +210,51 @@ model SmsPackage {
   features    String[] @default([])
   isActive    Boolean  @default(true)
   isPopular   Boolean  @default(false)
+}
+
+model Package {
+  id         String     @id @default(cuid())
+  name       String     @unique
+  units      Int // credits included
+  priceCents Int // price in cents (for reference)
+  active     Boolean    @default(true)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  Purchase   Purchase[]
+
+  // Stripe price IDs (optional, can be set via env or admin)
+  stripePriceIdEur String? @db.VarChar(255)
+  stripePriceIdUsd String? @db.VarChar(255)
+
+  @@index([stripePriceIdEur])
+  @@index([stripePriceIdUsd])
+}
+
+model Purchase {
+  id         String        @id @default(cuid())
+  shopId     String
+  packageId  String
+  package    Package       @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  units      Int
+  priceCents Int
+  status     PaymentStatus @default(pending)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  // Stripe integration
+  stripeSessionId       String? @unique
+  stripePaymentIntentId String?
+  stripeCustomerId      String?
+  stripePriceId         String?
+  currency              String? @db.VarChar(3)
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId])
+  @@index([packageId])
+  @@index([stripeSessionId])
+  @@index([status])
+  @@index([shopId, status])
 }
 
 model WalletTransaction {
@@ -261,8 +321,8 @@ model AutomationLog {
 model EventProcessingState {
   id              String   @id @default(cuid())
   shopId          String
-  automationType  String   // 'welcome', 'order_placed', 'order_fulfilled'
-  lastEventId     String?  // Last processed Shopify event GID
+  automationType  String // 'welcome', 'order_placed', 'order_fulfilled'
+  lastEventId     String? // Last processed Shopify event GID
   lastProcessedAt DateTime @default(now())
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -325,6 +385,23 @@ enum TransactionType {
   adjustment
 }
 
+enum SubscriptionPlanType {
+  starter
+  pro
+}
+
+enum SubscriptionStatus {
+  active
+  inactive
+  cancelled
+}
+
+enum CreditTxnType {
+  credit // e.g. admin topup, purchase, subscription credits
+  debit // e.g. campaign enqueue
+  refund // e.g. immediate provider hard-fail, stripe refund
+}
+
 enum AutomationTrigger {
   welcome
   abandoned_cart
@@ -338,6 +415,13 @@ enum AutomationTrigger {
   cart_abandoned
   order_placed
   order_fulfilled
+}
+
+enum PaymentStatus {
+  pending
+  paid
+  failed
+  refunded
 }
 
 model ShopSettings {
@@ -367,6 +451,32 @@ model BillingTransaction {
   shop            Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   @@index([shopId, createdAt])
+}
+
+model CreditTransaction {
+  id           String        @id @default(cuid())
+  shopId       String
+  shop         Shop          @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  type         CreditTxnType
+  amount       Int // positive integer (credits)
+  balanceAfter Int // snapshot of wallet balance after this txn
+  reason       String?       @db.VarChar(200)
+  campaignId   String?
+  campaign     Campaign?     @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  messageId    String?
+  message      MessageLog?   @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  meta         Json?
+  createdAt    DateTime      @default(now())
+  walletId     String?
+  wallet       Wallet?       @relation(fields: [walletId], references: [id], onDelete: SetNull)
+
+  @@index([shopId])
+  @@index([campaignId])
+  @@index([messageId])
+  @@index([walletId])
+  @@index([createdAt])
+  @@index([reason])
+  @@index([shopId, reason])
 }
 
 model Template {

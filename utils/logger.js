@@ -89,7 +89,10 @@ class Logger {
     };
 
     this.warn(`Security event: ${event}`, meta);
-    this.writeToFile('security.log', this.formatLog('WARN', `Security: ${event}`, meta));
+    this.writeToFile(
+      'security.log',
+      this.formatLog('WARN', `Security: ${event}`, meta),
+    );
   }
 
   // Performance logging
@@ -113,7 +116,10 @@ class Logger {
     };
 
     this.info(`Business event: ${event}`, meta);
-    this.writeToFile('business.log', this.formatLog('INFO', `Business: ${event}`, meta));
+    this.writeToFile(
+      'business.log',
+      this.formatLog('INFO', `Business: ${event}`, meta),
+    );
   }
 }
 

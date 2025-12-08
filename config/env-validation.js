@@ -12,12 +12,8 @@ const REQUIRED_ENV_VARS = {
     'SHOPIFY_API_SECRET',
     'STRIPE_SECRET_KEY',
   ],
-  development: [
-    'DATABASE_URL',
-  ],
-  test: [
-    'DATABASE_URL',
-  ],
+  development: ['DATABASE_URL'],
+  test: ['DATABASE_URL'],
 };
 
 const OPTIONAL_ENV_VARS = {
@@ -40,11 +36,7 @@ const OPTIONAL_ENV_VARS = {
     'MITTO_API_KEY',
     'STRIPE_SECRET_KEY',
   ],
-  test: [
-    'REDIS_URL',
-    'SHOPIFY_API_KEY',
-    'SHOPIFY_API_SECRET',
-  ],
+  test: ['REDIS_URL', 'SHOPIFY_API_KEY', 'SHOPIFY_API_SECRET'],
 };
 
 /**
@@ -52,7 +44,9 @@ const OPTIONAL_ENV_VARS = {
  * @param {string} env - Environment (production, development, test)
  * @returns {Object} Validation result
  */
-export function validateEnvironment(env = process.env.NODE_ENV || 'development') {
+export function validateEnvironment(
+  env = process.env.NODE_ENV || 'development',
+) {
   const required = REQUIRED_ENV_VARS[env] || REQUIRED_ENV_VARS.development;
   const optional = OPTIONAL_ENV_VARS[env] || OPTIONAL_ENV_VARS.development;
 
@@ -99,15 +93,18 @@ export function validateAndLogEnvironment() {
 
     throw new Error(
       `Missing required environment variables: ${validation.missing.join(', ')}\n` +
-      'Please check your .env file or environment configuration.',
+        'Please check your .env file or environment configuration.',
     );
   }
 
   if (validation.warnings.length > 0) {
-    logger.warn('Missing optional environment variables (recommended for production)', {
-      environment: env,
-      missing: validation.warnings,
-    });
+    logger.warn(
+      'Missing optional environment variables (recommended for production)',
+      {
+        environment: env,
+        missing: validation.warnings,
+      },
+    );
   }
 
   logger.info('Environment validation passed', {
@@ -141,4 +138,3 @@ export default {
   validateAndLogEnvironment,
   getEnv,
 };
-

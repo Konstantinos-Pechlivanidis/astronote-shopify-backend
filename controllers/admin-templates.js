@@ -171,18 +171,14 @@ export async function getAllTemplatesAdmin(req, res, _next) {
     const pageSize = parseInt(limit);
     const totalPages = Math.ceil(total / pageSize);
 
-    return sendPaginated(
-      res,
-      templates,
-      {
-        page,
-        pageSize,
-        total,
-        totalPages,
-        hasNextPage: parseInt(offset) + parseInt(limit) < total,
-        hasPrevPage: parseInt(offset) > 0,
-      },
-    );
+    return sendPaginated(res, templates, {
+      page,
+      pageSize,
+      total,
+      totalPages,
+      hasNextPage: parseInt(offset) + parseInt(limit) < total,
+      hasPrevPage: parseInt(offset) > 0,
+    });
   } catch (error) {
     logger.error('Failed to fetch templates for admin', {
       error: error.message,
@@ -220,12 +216,17 @@ export async function getTemplateStats(req, res, _next) {
       throw new NotFoundError('Template');
     }
 
-    const totalUsage = template.usage.reduce((sum, usage) => sum + usage.usedCount, 0);
+    const totalUsage = template.usage.reduce(
+      (sum, usage) => sum + usage.usedCount,
+      0,
+    );
     const uniqueShops = template.usage.length;
 
     // Generate fake metrics for development (realistic ranges)
-    const hasUrls = template.content.includes('{{') &&
-                    (template.content.includes('Url}}') || template.content.includes('url}}'));
+    const hasUrls =
+      template.content.includes('{{') &&
+      (template.content.includes('Url}}') ||
+        template.content.includes('url}}'));
 
     const fakeMetrics = {
       deliveryRate: (92 + Math.random() * 6).toFixed(2), // 92-98%
@@ -248,7 +249,9 @@ export async function getTemplateStats(req, res, _next) {
       },
       metrics: {
         deliveryRate: `${fakeMetrics.deliveryRate}%`,
-        clickThroughRate: fakeMetrics.clickThroughRate ? `${fakeMetrics.clickThroughRate}%` : 'N/A',
+        clickThroughRate: fakeMetrics.clickThroughRate
+          ? `${fakeMetrics.clickThroughRate}%`
+          : 'N/A',
         replyRate: `${fakeMetrics.replyRate}%`,
         conversions: fakeMetrics.conversions,
         note: 'These are simulated metrics for development purposes',

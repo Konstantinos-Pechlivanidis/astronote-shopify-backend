@@ -30,7 +30,9 @@ export function mapMittoStatusToInternal(mittoStatus) {
   }
 
   // Default to sent for unknown statuses
-  logger.warn('Unknown Mitto deliveryStatus, defaulting to sent', { mittoStatus });
+  logger.warn('Unknown Mitto deliveryStatus, defaulting to sent', {
+    mittoStatus,
+  });
   return 'sent';
 }
 
@@ -40,7 +42,10 @@ export function mapMittoStatusToInternal(mittoStatus) {
  * @param {string} campaignId - Campaign ID (optional)
  * @returns {Promise<Object>} Updated status info
  */
-export async function updateMessageDeliveryStatus(mittoMessageId, campaignId = null) {
+export async function updateMessageDeliveryStatus(
+  mittoMessageId,
+  campaignId = null,
+) {
   try {
     if (!mittoMessageId) {
       logger.warn('No Mitto message ID provided for status update');
@@ -91,7 +96,11 @@ export async function updateMessageDeliveryStatus(mittoMessageId, campaignId = n
         });
 
         // Update campaign metrics only if status changed
-        if (internalStatus === 'delivered' && previousDeliveryStatus !== 'Delivered' && previousDeliveryStatus !== 'delivered') {
+        if (
+          internalStatus === 'delivered' &&
+          previousDeliveryStatus !== 'Delivered' &&
+          previousDeliveryStatus !== 'delivered'
+        ) {
           // Only increment if this is the first time we're marking it as delivered
           await prisma.campaignMetrics.update({
             where: { campaignId },
@@ -188,14 +197,21 @@ export async function updateCampaignDeliveryStatuses(campaignId) {
   }
 
   // Filter out recipients that already have final statuses
-  const recipientsToUpdate = recipients.filter((recipient) => {
+  const recipientsToUpdate = recipients.filter(recipient => {
     const deliveryStatus = recipient.deliveryStatus?.toLowerCase();
     // Skip if already in final status
-    return !deliveryStatus || (deliveryStatus !== 'delivered' && deliveryStatus !== 'failed' && deliveryStatus !== 'failure');
+    return (
+      !deliveryStatus ||
+      (deliveryStatus !== 'delivered' &&
+        deliveryStatus !== 'failed' &&
+        deliveryStatus !== 'failure')
+    );
   });
 
   if (recipientsToUpdate.length === 0) {
-    logger.info('All recipients already have final delivery statuses', { campaignId });
+    logger.info('All recipients already have final delivery statuses', {
+      campaignId,
+    });
     // Still update campaign status in case it needs to change
     await updateCampaignStatusFromRecipients(campaignId);
     return {
@@ -212,20 +228,24 @@ export async function updateCampaignDeliveryStatuses(campaignId) {
   });
 
   // Update statuses in parallel (with rate limiting consideration)
-  const updatePromises = recipientsToUpdate.map((recipient) =>
-    updateMessageDeliveryStatus(recipient.mittoMessageId, campaignId).catch((error) => {
-      logger.error('Failed to update recipient status', {
-        campaignId,
-        recipientId: recipient.id,
-        mittoMessageId: recipient.mittoMessageId,
-        error: error.message,
-      });
-      return null; // Return null on error to continue processing others
-    }),
+  const updatePromises = recipientsToUpdate.map(recipient =>
+    updateMessageDeliveryStatus(recipient.mittoMessageId, campaignId).catch(
+      error => {
+        logger.error('Failed to update recipient status', {
+          campaignId,
+          recipientId: recipient.id,
+          mittoMessageId: recipient.mittoMessageId,
+          error: error.message,
+        });
+        return null; // Return null on error to continue processing others
+      },
+    ),
   );
 
   const results = await Promise.allSettled(updatePromises);
-  const successful = results.filter((r) => r.status === 'fulfilled' && r.value !== null).length;
+  const successful = results.filter(
+    r => r.status === 'fulfilled' && r.value !== null,
+  ).length;
 
   logger.info('Campaign delivery status update completed', {
     campaignId,
@@ -294,7 +314,7 @@ export async function updateCampaignStatusFromRecipients(campaignId) {
     failed: 0,
   };
 
-  recipients.forEach((recipient) => {
+  recipients.forEach(recipient => {
     statusCounts[recipient.status] = (statusCounts[recipient.status] || 0) + 1;
   });
 
@@ -384,11 +404,11 @@ export async function updateAllActiveCampaigns(limit = 50) {
 
   // Process campaigns in parallel
   const results = await Promise.allSettled(
-    campaigns.map((campaign) => updateCampaignDeliveryStatuses(campaign.id)),
+    campaigns.map(campaign => updateCampaignDeliveryStatuses(campaign.id)),
   );
 
-  const successful = results.filter((r) => r.status === 'fulfilled').length;
-  const failed = results.filter((r) => r.status === 'rejected').length;
+  const successful = results.filter(r => r.status === 'fulfilled').length;
+  const failed = results.filter(r => r.status === 'rejected').length;
 
   logger.info('All active campaigns update completed', {
     total: campaigns.length,
@@ -410,4 +430,3 @@ export default {
   updateCampaignStatusFromRecipients,
   updateAllActiveCampaigns,
 };
-

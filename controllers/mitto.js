@@ -22,7 +22,9 @@ export async function deliveryReport(req, res, next) {
     const to = payload.to || payload.msisdn || null;
     const status = payload.status || payload.dlr_status || 'delivered';
 
-    const log = await prisma.messageLog.findFirst({ where: { providerMsgId: messageId } });
+    const log = await prisma.messageLog.findFirst({
+      where: { providerMsgId: messageId },
+    });
     if (log) {
       await prisma.messageLog.update({
         where: { id: log.id },
@@ -31,7 +33,10 @@ export async function deliveryReport(req, res, next) {
       if (log.campaignId) {
         await prisma.campaignRecipient.updateMany({
           where: { campaignId: log.campaignId, phoneE164: to },
-          data: { status, deliveredAt: status === 'delivered' ? new Date() : null },
+          data: {
+            status,
+            deliveredAt: status === 'delivered' ? new Date() : null,
+          },
         });
         if (status === 'delivered') {
           await prisma.campaignMetrics.updateMany({

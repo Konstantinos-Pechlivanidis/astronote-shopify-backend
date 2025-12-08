@@ -2,7 +2,10 @@ import { logger } from '../utils/logger.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 import prisma from '../services/prisma.js';
-import contactsService, { normalizePhone, isValidPhoneE164 } from '../services/contacts.js';
+import contactsService, {
+  normalizePhone,
+  isValidPhoneE164,
+} from '../services/contacts.js';
 
 /**
  * Public opt-in endpoint handler
@@ -30,7 +33,9 @@ export async function handleOptIn(req, res, next) {
     // Validate phone format
     const phoneE164 = normalizePhone(phone);
     if (!isValidPhoneE164(phoneE164)) {
-      throw new ValidationError('Invalid phone number format. Use E.164 format (e.g., +306977123456)');
+      throw new ValidationError(
+        'Invalid phone number format. Use E.164 format (e.g., +306977123456)',
+      );
     }
 
     // Validate shop domain format
@@ -45,7 +50,9 @@ export async function handleOptIn(req, res, next) {
 
     if (!shop) {
       logger.warn('Shop not found for opt-in', { shopDomain });
-      throw new NotFoundError('Shop not found. Please ensure the app is installed on this store.');
+      throw new NotFoundError(
+        'Shop not found. Please ensure the app is installed on this store.',
+      );
     }
 
     // Validate required fields
@@ -212,7 +219,9 @@ export async function handleOptIn(req, res, next) {
         smsConsent: contact.smsConsent,
         firstName: contact.firstName,
         lastName: contact.lastName,
-        birthday: contact.birthDate ? contact.birthDate.toISOString().split('T')[0] : null,
+        birthday: contact.birthDate
+          ? contact.birthDate.toISOString().split('T')[0]
+          : null,
         gender: contact.gender,
       },
       'Successfully opted in to SMS marketing',
@@ -243,4 +252,3 @@ export async function handleOptIn(req, res, next) {
 export default {
   handleOptIn,
 };
-

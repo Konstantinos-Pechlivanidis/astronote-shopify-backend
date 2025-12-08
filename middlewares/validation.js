@@ -32,12 +32,13 @@ export function validateBody(schema) {
       if (error.name === 'ZodError' || error.issues) {
         // Handle both ZodError and error.issues format
         const zodErrors = error.issues || error.errors || [];
-        const errors = Array.isArray(zodErrors) && zodErrors.length > 0
-          ? zodErrors.map(err => ({
-            field: (err.path || []).join('.') || null,
-            message: err.message || 'Validation error',
-          }))
-          : [{ field: null, message: error.message || 'Validation failed' }];
+        const errors =
+          Array.isArray(zodErrors) && zodErrors.length > 0
+            ? zodErrors.map(err => ({
+              field: (err.path || []).join('.') || null,
+              message: err.message || 'Validation error',
+            }))
+            : [{ field: null, message: error.message || 'Validation failed' }];
 
         logger.warn('Validation error', {
           path: req.path,
@@ -67,10 +68,17 @@ export function validateQuery(schema) {
       next();
     } catch (error) {
       if (error.name === 'ZodError') {
-        const errors = Array.isArray(error.errors) ? error.errors.map(err => ({
-          field: err.path.join('.'),
-          message: err.message,
-        })) : [{ field: null, message: error.message || 'Unknown validation error' }];
+        const errors = Array.isArray(error.errors)
+          ? error.errors.map(err => ({
+            field: err.path.join('.'),
+            message: err.message,
+          }))
+          : [
+            {
+              field: null,
+              message: error.message || 'Unknown validation error',
+            },
+          ];
 
         logger.warn('Query validation error', {
           path: req.path,
@@ -98,10 +106,17 @@ export function validateParams(schema) {
       next();
     } catch (error) {
       if (error.name === 'ZodError') {
-        const errors = Array.isArray(error.errors) ? error.errors.map(err => ({
-          field: err.path.join('.'),
-          message: err.message,
-        })) : [{ field: null, message: error.message || 'Unknown validation error' }];
+        const errors = Array.isArray(error.errors)
+          ? error.errors.map(err => ({
+            field: err.path.join('.'),
+            message: err.message,
+          }))
+          : [
+            {
+              field: null,
+              message: error.message || 'Unknown validation error',
+            },
+          ];
 
         logger.warn('Params validation error', {
           path: req.path,
@@ -121,4 +136,3 @@ export default {
   validateQuery,
   validateParams,
 };
-

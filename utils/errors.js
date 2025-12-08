@@ -95,7 +95,7 @@ export const formatErrorResponse = (error, req = {}) => {
 };
 
 // Async error handler wrapper
-export const asyncHandler = (fn) => {
+export const asyncHandler = fn => {
   return (req, res, next) => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };

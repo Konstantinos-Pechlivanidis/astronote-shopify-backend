@@ -22,10 +22,18 @@ export async function getCampaignPerformance(storeId, filters = {}) {
   try {
     // Build where clause - use same status validation as campaigns service
     // Valid campaign statuses: draft, scheduled, sending, sent, failed, cancelled
-    const validStatuses = ['draft', 'scheduled', 'sending', 'sent', 'failed', 'cancelled'];
+    const validStatuses = [
+      'draft',
+      'scheduled',
+      'sending',
+      'sent',
+      'failed',
+      'cancelled',
+    ];
     const whereClause = {
       shopId: storeId,
-      ...(from && to && {
+      ...(from &&
+        to && {
         createdAt: {
           gte: new Date(from),
           lte: new Date(to),
@@ -47,11 +55,13 @@ export async function getCampaignPerformance(storeId, filters = {}) {
     // Ensure all 6 statuses are always included (same as getCampaignStats in campaigns service)
     const statusBreakdown = {
       draft: campaignStats.find(s => s.status === 'draft')?._count?.id || 0,
-      scheduled: campaignStats.find(s => s.status === 'scheduled')?._count?.id || 0,
+      scheduled:
+        campaignStats.find(s => s.status === 'scheduled')?._count?.id || 0,
       sending: campaignStats.find(s => s.status === 'sending')?._count?.id || 0,
       sent: campaignStats.find(s => s.status === 'sent')?._count?.id || 0,
       failed: campaignStats.find(s => s.status === 'failed')?._count?.id || 0,
-      cancelled: campaignStats.find(s => s.status === 'cancelled')?._count?.id || 0,
+      cancelled:
+        campaignStats.find(s => s.status === 'cancelled')?._count?.id || 0,
     };
 
     // Calculate metrics from CampaignMetrics (aggregated from CampaignRecipient)
@@ -77,9 +87,18 @@ export async function getCampaignPerformance(storeId, filters = {}) {
     });
 
     // Aggregate metrics across all campaigns
-    const sent = campaignsWithMetrics.reduce((sum, c) => sum + (c.metrics?.totalSent || 0), 0);
-    const delivered = campaignsWithMetrics.reduce((sum, c) => sum + (c.metrics?.totalDelivered || 0), 0);
-    const failed = campaignsWithMetrics.reduce((sum, c) => sum + (c.metrics?.totalFailed || 0), 0);
+    const sent = campaignsWithMetrics.reduce(
+      (sum, c) => sum + (c.metrics?.totalSent || 0),
+      0,
+    );
+    const delivered = campaignsWithMetrics.reduce(
+      (sum, c) => sum + (c.metrics?.totalDelivered || 0),
+      0,
+    );
+    const failed = campaignsWithMetrics.reduce(
+      (sum, c) => sum + (c.metrics?.totalFailed || 0),
+      0,
+    );
     const deliveryRate = sent > 0 ? (delivered / sent) * 100 : 0;
 
     // Get top performing campaigns - only include campaigns that have been sent (sent or failed status)
@@ -132,7 +151,8 @@ export async function getCampaignPerformance(storeId, filters = {}) {
           status: {
             in: ['sending', 'sent', 'failed'], // Only count recipients from active/completed campaigns
           },
-          ...(from && to && {
+          ...(from &&
+            to && {
             createdAt: {
               gte: new Date(from),
               lte: new Date(to),
@@ -146,10 +166,14 @@ export async function getCampaignPerformance(storeId, filters = {}) {
     });
 
     // Calculate total campaigns (all statuses)
-    const totalCampaigns = campaignStats.reduce((sum, stat) => sum + stat._count.id, 0);
+    const totalCampaigns = campaignStats.reduce(
+      (sum, stat) => sum + stat._count.id,
+      0,
+    );
 
     // Calculate active campaigns (sending, sent, failed)
-    const activeCampaigns = statusBreakdown.sending + statusBreakdown.sent + statusBreakdown.failed;
+    const activeCampaigns =
+      statusBreakdown.sending + statusBreakdown.sent + statusBreakdown.failed;
 
     return {
       summary: {
@@ -168,7 +192,8 @@ export async function getCampaignPerformance(storeId, filters = {}) {
         id: campaign.id,
         name: campaign.name,
         status: campaign.status, // Campaign status (sent, failed, sending)
-        delivered: campaign.metrics?.totalDelivered || campaign._count.messages || 0,
+        delivered:
+          campaign.metrics?.totalDelivered || campaign._count.messages || 0,
         sent: campaign.metrics?.totalSent || 0,
         createdAt: campaign.createdAt,
       })),
@@ -178,10 +203,12 @@ export async function getCampaignPerformance(storeId, filters = {}) {
           date: trend.sentAt.toISOString().split('T')[0],
           messages: trend._count.id,
         })),
-      statusBreakdown: Object.entries(statusBreakdown).map(([status, count]) => ({
-        status,
-        count,
-      })),
+      statusBreakdown: Object.entries(statusBreakdown).map(
+        ([status, count]) => ({
+          status,
+          count,
+        }),
+      ),
       campaignStats: {
         // Alias for backward compatibility
         totalSent: sent,
@@ -191,7 +218,10 @@ export async function getCampaignPerformance(storeId, filters = {}) {
       },
     };
   } catch (error) {
-    logger.error('Failed to get campaign performance', { storeId, error: error.message });
+    logger.error('Failed to get campaign performance', {
+      storeId,
+      error: error.message,
+    });
     throw error;
   }
 }
@@ -210,7 +240,8 @@ export async function getAutomationInsights(storeId, filters = {}) {
     const automationLogs = await prisma.automationLog.findMany({
       where: {
         storeId,
-        ...(from && to && {
+        ...(from &&
+          to && {
           triggeredAt: {
             gte: new Date(from),
             lte: new Date(to),
@@ -257,14 +288,19 @@ export async function getAutomationInsights(storeId, filters = {}) {
         totalTriggered: automationLogs.length,
         totalActive: userAutomations.filter(ua => ua.isActive).length,
         totalInactive: userAutomations.filter(ua => !ua.isActive).length,
-        completionRate: automationLogs.length > 0
-          ? Math.round((statusBreakdown.sent || 0) / automationLogs.length * 100)
-          : 0,
+        completionRate:
+          automationLogs.length > 0
+            ? Math.round(
+              ((statusBreakdown.sent || 0) / automationLogs.length) * 100,
+            )
+            : 0,
       },
-      statusBreakdown: Object.entries(statusBreakdown).map(([status, count]) => ({
-        status,
-        count,
-      })),
+      statusBreakdown: Object.entries(statusBreakdown).map(
+        ([status, count]) => ({
+          status,
+          count,
+        }),
+      ),
       typeBreakdown: Object.entries(typeBreakdown).map(([type, count]) => ({
         type,
         count,
@@ -282,7 +318,10 @@ export async function getAutomationInsights(storeId, filters = {}) {
       })),
     };
   } catch (error) {
-    logger.error('Failed to get automation insights', { storeId, error: error.message });
+    logger.error('Failed to get automation insights', {
+      storeId,
+      error: error.message,
+    });
     throw error;
   }
 }
@@ -304,7 +343,8 @@ export async function getCreditUsage(storeId, filters = {}) {
     const billingTransactions = await prisma.billingTransaction.findMany({
       where: {
         shopId: storeId,
-        ...(from && to && {
+        ...(from &&
+          to && {
           createdAt: {
             gte: new Date(from),
             lte: new Date(to),
@@ -318,13 +358,15 @@ export async function getCreditUsage(storeId, filters = {}) {
     const messageLogs = await prisma.messageLog.findMany({
       where: {
         shopId: storeId,
-        ...(from && to && {
+        ...(from &&
+          to && {
           createdAt: {
             gte: new Date(from),
             lte: new Date(to),
           },
         }),
-        ...(usageType && usageType !== 'all' && {
+        ...(usageType &&
+          usageType !== 'all' && {
           ...(usageType === 'campaign' && { campaignId: { not: null } }),
           ...(usageType === 'manual' && { campaignId: null }),
         }),
@@ -354,10 +396,12 @@ export async function getCreditUsage(storeId, filters = {}) {
     }, {});
 
     // Calculate average usage
-    const totalDays = from && to
-      ? Math.ceil((new Date(to) - new Date(from)) / (1000 * 60 * 60 * 24))
-      : 30;
-    const avgDailyUsage = totalDays > 0 ? Math.round(messageLogs.length / totalDays) : 0;
+    const totalDays =
+      from && to
+        ? Math.ceil((new Date(to) - new Date(from)) / (1000 * 60 * 60 * 24))
+        : 30;
+    const avgDailyUsage =
+      totalDays > 0 ? Math.round(messageLogs.length / totalDays) : 0;
 
     return {
       summary: {
@@ -370,7 +414,10 @@ export async function getCreditUsage(storeId, filters = {}) {
       usageBreakdown: Object.entries(usageBreakdown).map(([type, count]) => ({
         type,
         count,
-        percentage: messageLogs.length > 0 ? Math.round((count / messageLogs.length) * 100) : 0,
+        percentage:
+          messageLogs.length > 0
+            ? Math.round((count / messageLogs.length) * 100)
+            : 0,
       })),
       trends: Object.entries(dailyUsage).map(([date, count]) => ({
         date,
@@ -386,7 +433,10 @@ export async function getCreditUsage(storeId, filters = {}) {
       })),
     };
   } catch (error) {
-    logger.error('Failed to get credit usage', { storeId, error: error.message });
+    logger.error('Failed to get credit usage', {
+      storeId,
+      error: error.message,
+    });
     throw error;
   }
 }
@@ -406,7 +456,8 @@ export async function getContactInsights(storeId, filters = {}) {
       by: ['smsConsent', 'gender'],
       where: {
         shopId: storeId,
-        ...(from && to && {
+        ...(from &&
+          to && {
           createdAt: {
             gte: new Date(from),
             lte: new Date(to),
@@ -477,16 +528,25 @@ export async function getContactInsights(storeId, filters = {}) {
         totalContacts,
         optedInContacts,
         optedOutContacts: totalContacts - optedInContacts,
-        consentRate: totalContacts > 0 ? Math.round((optedInContacts / totalContacts) * 100) : 0,
+        consentRate:
+          totalContacts > 0
+            ? Math.round((optedInContacts / totalContacts) * 100)
+            : 0,
         birthdayContacts,
         recentContacts,
         engagedContacts,
-        engagementRate: totalContacts > 0 ? Math.round((engagedContacts / totalContacts) * 100) : 0,
+        engagementRate:
+          totalContacts > 0
+            ? Math.round((engagedContacts / totalContacts) * 100)
+            : 0,
       },
       genderDistribution: genderStats.map(stat => ({
         gender: stat.gender || 'unknown',
         count: stat._count.gender,
-        percentage: totalContacts > 0 ? Math.round((stat._count.gender / totalContacts) * 100) : 0,
+        percentage:
+          totalContacts > 0
+            ? Math.round((stat._count.gender / totalContacts) * 100)
+            : 0,
       })),
       consentBreakdown: contactStats
         .filter(stat => stat.smsConsent)
@@ -496,7 +556,10 @@ export async function getContactInsights(storeId, filters = {}) {
         }, {}),
     };
   } catch (error) {
-    logger.error('Failed to get contact insights', { storeId, error: error.message });
+    logger.error('Failed to get contact insights', {
+      storeId,
+      error: error.message,
+    });
     throw error;
   }
 }
@@ -518,33 +581,36 @@ export async function getKPIs(storeId) {
     const [campaigns, contacts, automations, creditStats] = await Promise.all([
       prisma.campaign.count({ where: { shopId: storeId } }),
       prisma.contact.count({ where: { shopId: storeId } }),
-      prisma.userAutomation.count({ where: { shopId: storeId, isActive: true } }),
+      prisma.userAutomation.count({
+        where: { shopId: storeId, isActive: true },
+      }),
       getCreditUsageStats(storeId),
     ]);
 
     // Get recent activity (last 7 days)
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    const [recentCampaigns, recentMessages, recentAutomations] = await Promise.all([
-      prisma.campaign.count({
-        where: {
-          shopId: storeId,
-          createdAt: { gte: sevenDaysAgo },
-        },
-      }),
-      prisma.messageLog.count({
-        where: {
-          shopId: storeId,
-          createdAt: { gte: sevenDaysAgo },
-        },
-      }),
-      prisma.automationLog.count({
-        where: {
-          storeId,
-          triggeredAt: { gte: sevenDaysAgo },
-        },
-      }),
-    ]);
+    const [recentCampaigns, recentMessages, recentAutomations] =
+      await Promise.all([
+        prisma.campaign.count({
+          where: {
+            shopId: storeId,
+            createdAt: { gte: sevenDaysAgo },
+          },
+        }),
+        prisma.messageLog.count({
+          where: {
+            shopId: storeId,
+            createdAt: { gte: sevenDaysAgo },
+          },
+        }),
+        prisma.automationLog.count({
+          where: {
+            storeId,
+            triggeredAt: { gte: sevenDaysAgo },
+          },
+        }),
+      ]);
 
     const result = {
       overview: {

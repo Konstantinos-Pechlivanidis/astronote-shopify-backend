@@ -43,7 +43,9 @@ export async function createUserAutomation(req, res, next) {
     ];
 
     if (!validTriggers.includes(trigger)) {
-      throw new ValidationError(`Invalid trigger. Must be one of: ${validTriggers.join(', ')}`);
+      throw new ValidationError(
+        `Invalid trigger. Must be one of: ${validTriggers.join(', ')}`,
+      );
     }
 
     // Validate status if provided
@@ -91,17 +93,21 @@ export async function createUserAutomation(req, res, next) {
       trigger,
     });
 
-    return sendCreated(res, {
-      id: userAutomation.id,
-      automationId: userAutomation.automationId,
-      name: userAutomation.automation.title,
-      trigger: userAutomation.automation.triggerEvent,
-      message: userAutomation.userMessage,
-      status: userAutomation.isActive ? 'active' : 'draft',
-      isSystemDefault: userAutomation.automation.isSystemDefault,
-      createdAt: userAutomation.createdAt,
-      updatedAt: userAutomation.updatedAt,
-    }, 'Automation created successfully');
+    return sendCreated(
+      res,
+      {
+        id: userAutomation.id,
+        automationId: userAutomation.automationId,
+        name: userAutomation.automation.title,
+        trigger: userAutomation.automation.triggerEvent,
+        message: userAutomation.userMessage,
+        status: userAutomation.isActive ? 'active' : 'draft',
+        isSystemDefault: userAutomation.automation.isSystemDefault,
+        createdAt: userAutomation.createdAt,
+        updatedAt: userAutomation.updatedAt,
+      },
+      'Automation created successfully',
+    );
   } catch (error) {
     logger.error('Failed to create user automation', {
       error: error.message,
@@ -145,7 +151,8 @@ export async function getUserAutomations(req, res, next) {
       name: userAutomation.automation.title,
       description: userAutomation.automation.description,
       trigger: userAutomation.automation.triggerEvent,
-      message: userAutomation.userMessage || userAutomation.automation.defaultMessage,
+      message:
+        userAutomation.userMessage || userAutomation.automation.defaultMessage,
       status: userAutomation.isActive ? 'active' : 'draft',
       isSystemDefault: userAutomation.automation.isSystemDefault,
       createdAt: userAutomation.createdAt,
@@ -220,7 +227,9 @@ export async function updateUserAutomation(req, res, next) {
     const updatedUserAutomation = await prisma.userAutomation.update({
       where: { id },
       data: {
-        ...(finalUserMessage !== undefined && { userMessage: finalUserMessage }),
+        ...(finalUserMessage !== undefined && {
+          userMessage: finalUserMessage,
+        }),
         ...(finalIsActive !== undefined && { isActive: finalIsActive }),
       },
       include: {
@@ -244,23 +253,29 @@ export async function updateUserAutomation(req, res, next) {
     });
 
     // Return in frontend-friendly format
-    return sendSuccess(res, {
-      id: updatedUserAutomation.id,
-      automationId: updatedUserAutomation.automationId,
-      name: updatedUserAutomation.automation.title,
-      description: updatedUserAutomation.automation.description,
-      trigger: updatedUserAutomation.automation.triggerEvent,
-      message: updatedUserAutomation.userMessage || updatedUserAutomation.automation.defaultMessage,
-      status: updatedUserAutomation.isActive ? 'active' : 'draft',
-      isSystemDefault: updatedUserAutomation.automation.isSystemDefault,
-      createdAt: updatedUserAutomation.createdAt,
-      updatedAt: updatedUserAutomation.updatedAt,
-      // Include backend fields for backward compatibility
-      title: updatedUserAutomation.automation.title,
-      triggerEvent: updatedUserAutomation.automation.triggerEvent,
-      userMessage: updatedUserAutomation.userMessage,
-      isActive: updatedUserAutomation.isActive,
-    }, 'Automation updated successfully');
+    return sendSuccess(
+      res,
+      {
+        id: updatedUserAutomation.id,
+        automationId: updatedUserAutomation.automationId,
+        name: updatedUserAutomation.automation.title,
+        description: updatedUserAutomation.automation.description,
+        trigger: updatedUserAutomation.automation.triggerEvent,
+        message:
+          updatedUserAutomation.userMessage ||
+          updatedUserAutomation.automation.defaultMessage,
+        status: updatedUserAutomation.isActive ? 'active' : 'draft',
+        isSystemDefault: updatedUserAutomation.automation.isSystemDefault,
+        createdAt: updatedUserAutomation.createdAt,
+        updatedAt: updatedUserAutomation.updatedAt,
+        // Include backend fields for backward compatibility
+        title: updatedUserAutomation.automation.title,
+        triggerEvent: updatedUserAutomation.automation.triggerEvent,
+        userMessage: updatedUserAutomation.userMessage,
+        isActive: updatedUserAutomation.isActive,
+      },
+      'Automation updated successfully',
+    );
   } catch (error) {
     logger.error('Failed to update user automation', {
       error: error.message,
@@ -359,11 +374,15 @@ export async function syncSystemDefaults(req, res, next) {
       totalAutomations: systemAutomations.length,
     });
 
-    return sendSuccess(res, {
-      syncedCount,
-      totalShops: shops.length,
-      totalAutomations: systemAutomations.length,
-    }, `Successfully synced ${syncedCount} new automations to all users`);
+    return sendSuccess(
+      res,
+      {
+        syncedCount,
+        totalShops: shops.length,
+        totalAutomations: systemAutomations.length,
+      },
+      `Successfully synced ${syncedCount} new automations to all users`,
+    );
   } catch (error) {
     logger.error('Failed to sync system defaults', {
       error: error.message,

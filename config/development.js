@@ -10,8 +10,12 @@ export default {
 
   // Database Configuration
   database: {
-    url: process.env.DATABASE_URL || 'postgresql://username:password@localhost:5432/sendly_marketing',
-    directUrl: process.env.DIRECT_URL || 'postgresql://username:password@localhost:5432/sendly_marketing',
+    url:
+      process.env.DATABASE_URL ||
+      'postgresql://username:password@localhost:5432/sendly_marketing',
+    directUrl:
+      process.env.DIRECT_URL ||
+      'postgresql://username:password@localhost:5432/sendly_marketing',
   },
 
   // Redis Configuration (disabled for local development)
@@ -41,14 +45,17 @@ export default {
   mitto: {
     apiBase: process.env.MITTO_API_BASE || 'https://messaging.mittoapi.com',
     apiKey: process.env.MITTO_API_KEY || 'your_mitto_api_key',
-    trafficAccountId: process.env.MITTO_TRAFFIC_ACCOUNT_ID || 'your_traffic_account_id',
+    trafficAccountId:
+      process.env.MITTO_TRAFFIC_ACCOUNT_ID || 'your_traffic_account_id',
     senderName: process.env.MITTO_SENDER_NAME || 'Astronote',
   },
 
   // Application Configuration
   app: {
     host: process.env.HOST || 'http://localhost:3000',
-    allowedOrigins: process.env.ALLOWED_ORIGINS || 'http://localhost:3000,http://localhost:3001',
+    allowedOrigins:
+      process.env.ALLOWED_ORIGINS ||
+      'http://localhost:3000,http://localhost:3001',
     defaultCurrency: process.env.APP_DEFAULT_CURRENCY || 'EUR',
   },
 

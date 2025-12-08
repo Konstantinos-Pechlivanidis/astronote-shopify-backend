@@ -33,7 +33,9 @@ export const strictRateLimit = createRateLimit({
 
 // API key validation middleware
 export const validateApiKey = (req, res, next) => {
-  const apiKey = req.headers['x-api-key'] || req.headers['authorization']?.replace('Bearer ', '');
+  const apiKey =
+    req.headers['x-api-key'] ||
+    req.headers['authorization']?.replace('Bearer ', '');
 
   if (!apiKey) {
     return res.status(401).json({
@@ -59,7 +61,7 @@ export const validateApiKey = (req, res, next) => {
 // Request sanitization middleware
 export const sanitizeRequest = (req, res, next) => {
   // Remove potentially dangerous characters and normalize input
-  const sanitizeString = (str) => {
+  const sanitizeString = str => {
     if (typeof str !== 'string') return str;
     return str
       .replace(/[<>]/g, '') // Remove potential HTML/XML tags
@@ -70,7 +72,7 @@ export const sanitizeRequest = (req, res, next) => {
 
   // Sanitize body
   if (req.body && typeof req.body === 'object') {
-    const sanitizeObject = (obj) => {
+    const sanitizeObject = obj => {
       for (const key in obj) {
         if (Object.prototype.hasOwnProperty.call(obj, key)) {
           if (typeof obj[key] === 'string') {
@@ -100,7 +102,11 @@ export const sanitizeRequest = (req, res, next) => {
 export const validationRules = {
   // Contact validation
   contact: [
-    body('firstName').optional().isString().isLength({ min: 1, max: 50 }).trim(),
+    body('firstName')
+      .optional()
+      .isString()
+      .isLength({ min: 1, max: 50 })
+      .trim(),
     body('lastName').optional().isString().isLength({ min: 1, max: 50 }).trim(),
     body('phoneE164')
       .isString()
@@ -112,7 +118,7 @@ export const validationRules = {
     body('tags')
       .optional()
       .isArray()
-      .custom((tags) => {
+      .custom(tags => {
         if (tags && tags.length > 10) {
           throw new Error('Maximum 10 tags allowed');
         }
@@ -127,7 +133,9 @@ export const validationRules = {
     body('audience')
       .isString()
       .matches(/^(all|men|women|segment:[a-zA-Z0-9]+)$/),
-    body('scheduleType').optional().isIn(['immediate', 'scheduled', 'recurring']),
+    body('scheduleType')
+      .optional()
+      .isIn(['immediate', 'scheduled', 'recurring']),
     body('scheduleAt').optional().isISO8601().toDate(),
     body('recurringDays').optional().isInt({ min: 1, max: 365 }),
   ],
@@ -142,7 +150,10 @@ export const validationRules = {
   pagination: [
     query('page').optional().isInt({ min: 1 }).toInt(),
     query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
-    query('sort').optional().isString().isIn(['createdAt', 'updatedAt', 'name']),
+    query('sort')
+      .optional()
+      .isString()
+      .isIn(['createdAt', 'updatedAt', 'name']),
     query('order').optional().isString().isIn(['asc', 'desc']),
   ],
 
@@ -160,7 +171,7 @@ export const handleValidation = (req, res, next) => {
   const errors = validationResult(req);
 
   if (!errors.isEmpty()) {
-    const formattedErrors = errors.array().map((error) => ({
+    const formattedErrors = errors.array().map(error => ({
       field: error.path || error.param,
       message: error.msg,
       value: error.value,

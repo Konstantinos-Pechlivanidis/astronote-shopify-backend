@@ -10,7 +10,9 @@ import { getShopifySession, initShopifyContext } from './shopify.js';
 function getGraphQLClient(api) {
   if (!api) {
     logger.error('Shopify API not initialized');
-    throw new Error('Shopify API not initialized. Please check API configuration.');
+    throw new Error(
+      'Shopify API not initialized. Please check API configuration.',
+    );
   }
 
   let GraphqlClient = null;
@@ -31,7 +33,9 @@ function getGraphQLClient(api) {
       apiKeys: api ? Object.keys(api) : [],
       clientsKeys: api && api.clients ? Object.keys(api.clients) : [],
     });
-    throw new Error('Shopify API GraphQL client not available. Please check API initialization.');
+    throw new Error(
+      'Shopify API GraphQL client not available. Please check API initialization.',
+    );
   }
 
   return GraphqlClient;
@@ -92,7 +96,8 @@ export async function queryEvents(shopDomain, filters = {}) {
       filterParts.push(`occurredAt: { ${occurredAtParts.join(', ')} }`);
     }
 
-    const filterString = filterParts.length > 0 ? `, filter: { ${filterParts.join(', ')} }` : '';
+    const filterString =
+      filterParts.length > 0 ? `, filter: { ${filterParts.join(', ')} }` : '';
 
     const query = `
       query getEvents($first: Int!, $after: String${subjectTypes.length > 0 ? ', $subjectTypes: [EventSubjectType!]' : ''}${occurredAtMin ? ', $occurredAtMin: DateTime' : ''}${occurredAtMax ? ', $occurredAtMax: DateTime' : ''}) {
@@ -136,7 +141,9 @@ export async function queryEvents(shopDomain, filters = {}) {
 
     // Check for GraphQL errors
     if (response.body.errors && response.body.errors.length > 0) {
-      const graphqlErrors = response.body.errors.map(err => err.message).join('; ');
+      const graphqlErrors = response.body.errors
+        .map(err => err.message)
+        .join('; ');
       logger.error('Shopify GraphQL errors in queryEvents', {
         shopDomain,
         errors: response.body.errors,
@@ -212,7 +219,9 @@ export async function getEventDetails(shopDomain, eventId) {
     });
 
     if (response.body.errors && response.body.errors.length > 0) {
-      const graphqlErrors = response.body.errors.map(err => err.message).join('; ');
+      const graphqlErrors = response.body.errors
+        .map(err => err.message)
+        .join('; ');
       logger.error('Shopify GraphQL errors in getEventDetails', {
         shopDomain,
         eventId,
@@ -288,7 +297,9 @@ export async function getCustomerFromEvent(shopDomain, event) {
     });
 
     if (response.body.errors && response.body.errors.length > 0) {
-      const graphqlErrors = response.body.errors.map(err => err.message).join('; ');
+      const graphqlErrors = response.body.errors
+        .map(err => err.message)
+        .join('; ');
       logger.error('Shopify GraphQL errors in getCustomerFromEvent', {
         shopDomain,
         eventId: event.id,
@@ -311,7 +322,8 @@ export async function getCustomerFromEvent(shopDomain, event) {
     const customer = response.body.data.customer;
 
     // Check SMS marketing consent
-    const smsConsent = customer.smsMarketingConsent?.marketingState || 'NOT_SUBSCRIBED';
+    const smsConsent =
+      customer.smsMarketingConsent?.marketingState || 'NOT_SUBSCRIBED';
     const hasSmsConsent = smsConsent === 'SUBSCRIBED';
 
     return {
@@ -393,7 +405,9 @@ export async function getOrderFromEvent(shopDomain, event) {
     });
 
     if (response.body.errors && response.body.errors.length > 0) {
-      const graphqlErrors = response.body.errors.map(err => err.message).join('; ');
+      const graphqlErrors = response.body.errors
+        .map(err => err.message)
+        .join('; ');
       logger.error('Shopify GraphQL errors in getOrderFromEvent', {
         shopDomain,
         eventId: event.id,
@@ -421,17 +435,20 @@ export async function getOrderFromEvent(shopDomain, event) {
       email: order.email,
       totalPrice: order.totalPriceSet?.shopMoney?.amount || '0',
       currency: order.totalPriceSet?.shopMoney?.currencyCode || 'USD',
-      customer: order.customer ? {
-        id: order.customer.id,
-        email: order.customer.email,
-        firstName: order.customer.firstName,
-        lastName: order.customer.lastName,
-        phone: order.customer.phone,
-      } : null,
-      lineItems: order.lineItems?.edges?.map(edge => ({
-        title: edge.node.title,
-        quantity: edge.node.quantity,
-      })) || [],
+      customer: order.customer
+        ? {
+          id: order.customer.id,
+          email: order.customer.email,
+          firstName: order.customer.firstName,
+          lastName: order.customer.lastName,
+          phone: order.customer.phone,
+        }
+        : null,
+      lineItems:
+        order.lineItems?.edges?.map(edge => ({
+          title: edge.node.title,
+          quantity: edge.node.quantity,
+        })) || [],
     };
   } catch (error) {
     logger.error('Failed to get order from event', {
@@ -496,7 +513,9 @@ export async function getFulfillmentFromEvent(shopDomain, event) {
     });
 
     if (response.body.errors && response.body.errors.length > 0) {
-      const graphqlErrors = response.body.errors.map(err => err.message).join('; ');
+      const graphqlErrors = response.body.errors
+        .map(err => err.message)
+        .join('; ');
       logger.error('Shopify GraphQL errors in getFulfillmentFromEvent', {
         shopDomain,
         eventId: event.id,
@@ -523,19 +542,25 @@ export async function getFulfillmentFromEvent(shopDomain, event) {
       id: fulfillment.id,
       status: fulfillment.status,
       trackingNumber: fulfillment.trackingInfo?.number || null,
-      trackingUrls: fulfillment.trackingInfo?.url ? [fulfillment.trackingInfo.url] : [],
-      order: order ? {
-        id: order.id,
-        name: order.name,
-        email: order.email,
-        customer: order.customer ? {
-          id: order.customer.id,
-          email: order.customer.email,
-          firstName: order.customer.firstName,
-          lastName: order.customer.lastName,
-          phone: order.customer.phone,
-        } : null,
-      } : null,
+      trackingUrls: fulfillment.trackingInfo?.url
+        ? [fulfillment.trackingInfo.url]
+        : [],
+      order: order
+        ? {
+          id: order.id,
+          name: order.name,
+          email: order.email,
+          customer: order.customer
+            ? {
+              id: order.customer.id,
+              email: order.customer.email,
+              firstName: order.customer.firstName,
+              lastName: order.customer.lastName,
+              phone: order.customer.phone,
+            }
+            : null,
+        }
+        : null,
     };
   } catch (error) {
     logger.error('Failed to get fulfillment from event', {
@@ -556,4 +581,3 @@ export default {
   getOrderFromEvent,
   getFulfillmentFromEvent,
 };
-

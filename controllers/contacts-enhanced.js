@@ -30,22 +30,17 @@ export async function list(req, res, next) {
 
     const result = await contactsService.listContacts(storeId, filters);
 
-    return sendPaginated(
-      res,
-      result.contacts,
-      result.pagination,
-      {
-        contacts: result.contacts,
-        filters: {
-          applied: filters,
-          available: {
-            genders: ['male', 'female', 'other'],
-            smsConsent: ['opted_in', 'opted_out', 'unknown'],
-            filters: ['all', 'male', 'female', 'consented', 'nonconsented'],
-          },
+    return sendPaginated(res, result.contacts, result.pagination, {
+      contacts: result.contacts,
+      filters: {
+        applied: filters,
+        available: {
+          genders: ['male', 'female', 'other'],
+          smsConsent: ['opted_in', 'opted_out', 'unknown'],
+          filters: ['all', 'male', 'female', 'consented', 'nonconsented'],
         },
       },
-    );
+    });
   } catch (error) {
     logger.error('List contacts error', {
       error: error.message,
@@ -122,7 +117,11 @@ export async function update(req, res, next) {
     const { id } = req.params;
     const contactData = req.body;
 
-    const contact = await contactsService.updateContact(storeId, id, contactData);
+    const contact = await contactsService.updateContact(
+      storeId,
+      id,
+      contactData,
+    );
 
     return sendSuccess(res, contact, 'Contact updated successfully');
   } catch (error) {
@@ -184,9 +183,10 @@ export async function stats(req, res, next) {
         optedIn: stats.byConsent.opted_in,
         optedOut: stats.byConsent.opted_out,
         unknown: stats.byConsent.unknown,
-        consentRate: stats.total > 0
-          ? Math.round((stats.byConsent.opted_in / stats.total) * 100)
-          : 0,
+        consentRate:
+          stats.total > 0
+            ? Math.round((stats.byConsent.opted_in / stats.total) * 100)
+            : 0,
       },
       byGender: {
         male: stats.byGender.male,
@@ -203,9 +203,10 @@ export async function stats(req, res, next) {
       birthDate: {
         withBirthDate: stats.withBirthday,
         withoutBirthDate: stats.total - stats.withBirthday,
-        birthDateRate: stats.total > 0
-          ? Math.round((stats.withBirthday / stats.total) * 100)
-          : 0,
+        birthDateRate:
+          stats.total > 0
+            ? Math.round((stats.withBirthday / stats.total) * 100)
+            : 0,
       },
       automation: {
         birthdayEligible: stats.withBirthday,
@@ -234,7 +235,10 @@ export async function getBirthdayContacts(req, res, next) {
     const storeId = getStoreId(req);
     const daysAhead = parseInt(req.query.daysAhead) || 7;
 
-    const contacts = await contactsService.getBirthdayContacts(storeId, daysAhead);
+    const contacts = await contactsService.getBirthdayContacts(
+      storeId,
+      daysAhead,
+    );
 
     return sendSuccess(res, {
       daysAhead,
@@ -266,12 +270,18 @@ export async function importCsv(req, res, next) {
     const { contacts } = req.body;
 
     if (!Array.isArray(contacts) || contacts.length === 0) {
-      throw new ValidationError('Contacts must be provided as a non-empty array');
+      throw new ValidationError(
+        'Contacts must be provided as a non-empty array',
+      );
     }
 
     const result = await contactsService.importContacts(storeId, contacts);
 
-    return sendSuccess(res, result, `Successfully imported ${result.created} contacts, updated ${result.updated}, skipped ${result.skipped}`);
+    return sendSuccess(
+      res,
+      result,
+      `Successfully imported ${result.created} contacts, updated ${result.updated}, skipped ${result.skipped}`,
+    );
   } catch (error) {
     logger.error('Import contacts error', {
       error: error.message,

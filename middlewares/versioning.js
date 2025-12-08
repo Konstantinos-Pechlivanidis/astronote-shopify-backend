@@ -2,7 +2,10 @@
 export const apiVersioning = (req, res, next) => {
   // Extract version from header or URL
   const version =
-    req.headers['api-version'] || req.headers['accept-version'] || req.query.version || 'v1';
+    req.headers['api-version'] ||
+    req.headers['accept-version'] ||
+    req.query.version ||
+    'v1';
 
   // Validate version format
   if (!/^v\d+$/.test(version)) {
@@ -33,7 +36,7 @@ export const apiVersioning = (req, res, next) => {
 };
 
 // Version-specific route handler
-export const versionedRoute = (versions) => {
+export const versionedRoute = versions => {
   return (req, res, next) => {
     const version = req.apiVersion || 'v1';
     const handler = versions[version];
@@ -75,7 +78,10 @@ export const deprecationWarning = (deprecatedVersions = []) => {
 
     if (deprecatedVersions.includes(version)) {
       res.setHeader('Deprecation', 'true');
-      res.setHeader('Sunset', new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()); // 1 year from now
+      res.setHeader(
+        'Sunset',
+        new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+      ); // 1 year from now
 
       // Add warning to response
       const originalJson = res.json;
@@ -83,7 +89,9 @@ export const deprecationWarning = (deprecatedVersions = []) => {
         if (data && typeof data === 'object') {
           data._deprecation = {
             warning: `API version ${version} is deprecated`,
-            sunset: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+            sunset: new Date(
+              Date.now() + 365 * 24 * 60 * 60 * 1000,
+            ).toISOString(),
             migrationGuide: 'https://docs.astronote.com/api/migration',
           };
         }

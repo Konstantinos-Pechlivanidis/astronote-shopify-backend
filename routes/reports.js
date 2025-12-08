@@ -1,5 +1,9 @@
 import { Router } from 'express';
-import { rlReportsOverview, rlReportsGeneral, rlReportsExport } from '../middlewares/rateLimits.js';
+import {
+  rlReportsOverview,
+  rlReportsGeneral,
+  rlReportsExport,
+} from '../middlewares/rateLimits.js';
 import * as ctrl from '../controllers/reports.js';
 const r = Router();
 

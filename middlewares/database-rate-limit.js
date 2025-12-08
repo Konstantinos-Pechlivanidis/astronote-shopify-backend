@@ -24,10 +24,14 @@ async function cleanupOldRecords() {
     });
 
     if (result.count > 0) {
-      logger.debug('Cleaned up old rate limit records', { count: result.count });
+      logger.debug('Cleaned up old rate limit records', {
+        count: result.count,
+      });
     }
   } catch (error) {
-    logger.error('Error cleaning up rate limit records', { error: error.message });
+    logger.error('Error cleaning up rate limit records', {
+      error: error.message,
+    });
   }
 }
 
@@ -79,13 +83,19 @@ export function databaseRateLimit(options = {}) {
         });
 
         const retryAfter = oldestRecord
-          ? Math.ceil((windowMs - (Date.now() - oldestRecord.createdAt.getTime())) / 1000)
+          ? Math.ceil(
+            (windowMs - (Date.now() - oldestRecord.createdAt.getTime())) /
+                1000,
+          )
           : Math.ceil(windowMs / 1000);
 
         res.setHeader('Retry-After', retryAfter);
         res.setHeader('X-RateLimit-Limit', max);
         res.setHeader('X-RateLimit-Remaining', 0);
-        res.setHeader('X-RateLimit-Reset', new Date(Date.now() + retryAfter * 1000).toISOString());
+        res.setHeader(
+          'X-RateLimit-Reset',
+          new Date(Date.now() + retryAfter * 1000).toISOString(),
+        );
 
         return res.status(429).json({
           success: false,
@@ -106,7 +116,10 @@ export function databaseRateLimit(options = {}) {
       // Set rate limit headers
       res.setHeader('X-RateLimit-Limit', max);
       res.setHeader('X-RateLimit-Remaining', Math.max(0, max - count - 1));
-      res.setHeader('X-RateLimit-Reset', new Date(Date.now() + windowMs).toISOString());
+      res.setHeader(
+        'X-RateLimit-Reset',
+        new Date(Date.now() + windowMs).toISOString(),
+      );
 
       next();
     } catch (error) {
@@ -189,4 +202,3 @@ export default {
   dbReportsGeneralRateLimit,
   dbReportsExportRateLimit,
 };
-

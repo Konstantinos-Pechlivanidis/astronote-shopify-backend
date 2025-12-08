@@ -5,7 +5,12 @@ import morgan from 'morgan';
 import compression from 'compression';
 import hpp from 'hpp';
 import { initShopifyContext } from './services/shopify.js';
-import { logger, requestId, performanceMonitor, securityMonitor } from './utils/logger.js';
+import {
+  logger,
+  requestId,
+  performanceMonitor,
+  securityMonitor,
+} from './utils/logger.js';
 import { globalErrorHandler, notFoundHandler } from './utils/errors.js';
 import {
   apiVersioning,
@@ -29,6 +34,7 @@ import automationWebhookRoutes from './routes/automation-webhooks.js';
 import reportsRoutes from './routes/reports.js';
 import discountsRoutes from './routes/discounts.js';
 import billingRoutes from './routes/billing.js';
+import subscriptionRoutes from './routes/subscriptions.js';
 import mittoRoutes from './routes/mitto.js';
 import trackingRoutes from './routes/tracking.js';
 import settingsRoutes from './routes/settings.js';
@@ -91,16 +97,24 @@ app.use(
       const allowedOrigins = [
         'https://admin.shopify.com',
         'https://astronote-shopify-frontend.onrender.com',
-        ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim()) : []),
+        ...(process.env.ALLOWED_ORIGINS
+          ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim())
+          : []),
       ];
 
       // Allow all myshopify.com subdomains (for storefront theme extensions)
-      const isShopifyStorefront = origin.match(/^https:\/\/[a-zA-Z0-9-]+\.myshopify\.com$/);
+      const isShopifyStorefront = origin.match(
+        /^https:\/\/[a-zA-Z0-9-]+\.myshopify\.com$/,
+      );
 
       // Allow Shopify admin domains (for embedded apps)
       const isShopifyAdmin = origin.match(/^https:\/\/admin\.shopify\.com$/);
 
-      if (allowedOrigins.includes(origin) || isShopifyStorefront || isShopifyAdmin) {
+      if (
+        allowedOrigins.includes(origin) ||
+        isShopifyStorefront ||
+        isShopifyAdmin
+      ) {
         callback(null, true);
       } else {
         logger.warn(`CORS blocked origin: ${origin}`);
@@ -125,7 +139,11 @@ app.use(
       'Accept',
       'Origin',
     ],
-    exposedHeaders: ['X-Request-ID', 'X-Rate-Limit-Remaining', 'X-Rate-Limit-Reset'],
+    exposedHeaders: [
+      'X-Request-ID',
+      'X-Rate-Limit-Remaining',
+      'X-Rate-Limit-Reset',
+    ],
     maxAge: 86400, // 24 hours for preflight cache
   }),
 );
@@ -160,7 +178,7 @@ app.use((error, req, res, next) => {
 app.use(
   morgan('combined', {
     stream: {
-      write: (message) => logger.info(message.trim()),
+      write: message => logger.info(message.trim()),
     },
   }),
 );
@@ -182,6 +200,7 @@ app.use('/automations', resolveStore, requireStore, automationsRoutes);
 app.use('/reports', resolveStore, requireStore, reportsRoutes);
 app.use('/discounts', resolveStore, requireStore, discountsRoutes);
 app.use('/billing', resolveStore, requireStore, billingRoutes);
+app.use('/subscriptions', resolveStore, requireStore, subscriptionRoutes);
 app.use('/settings', resolveStore, requireStore, settingsRoutes);
 app.use('/audiences', resolveStore, requireStore, audiencesRoutes);
 app.use('/shopify', resolveStore, requireStore, shopifyRoutes);

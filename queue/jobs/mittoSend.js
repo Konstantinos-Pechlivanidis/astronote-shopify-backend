@@ -1,5 +1,9 @@
 import prisma from '../../services/prisma.js';
-import { sendSms, MittoApiError, ValidationError } from '../../services/mitto.js';
+import {
+  sendSms,
+  MittoApiError,
+  ValidationError,
+} from '../../services/mitto.js';
 import { logger } from '../../utils/logger.js';
 import { deliveryStatusQueue } from '../index.js';
 
@@ -141,8 +145,12 @@ export async function handleMittoSend(job) {
     return { ok: true, msgId };
   } catch (err) {
     const errorMessage = err?.message || String(err);
-    const errorType = err instanceof ValidationError ? 'validation' :
-      err instanceof MittoApiError ? 'api' : 'unknown';
+    const errorType =
+      err instanceof ValidationError
+        ? 'validation'
+        : err instanceof MittoApiError
+          ? 'api'
+          : 'unknown';
 
     logger.error('SMS send failed via queue', {
       campaignId,

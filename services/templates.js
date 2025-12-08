@@ -13,12 +13,7 @@ import { NotFoundError } from '../utils/errors.js';
  * @returns {Promise<Object>} Templates list with pagination
  */
 export async function listTemplates(filters = {}) {
-  const {
-    category,
-    search,
-    page = 1,
-    pageSize = 50,
-  } = filters;
+  const { category, search, page = 1, pageSize = 50 } = filters;
 
   logger.info('Listing templates', { filters });
 
@@ -65,7 +60,10 @@ export async function listTemplates(filters = {}) {
 
   const totalPages = Math.ceil(total / parseInt(pageSize));
 
-  logger.info('Templates listed successfully', { total, returned: templates.length });
+  logger.info('Templates listed successfully', {
+    total,
+    returned: templates.length,
+  });
 
   return {
     templates,
@@ -131,7 +129,11 @@ export async function trackTemplateUsage(storeId, templateId) {
     },
   });
 
-  logger.info('Template usage tracked', { storeId, templateId, usageId: usage.id });
+  logger.info('Template usage tracked', {
+    storeId,
+    templateId,
+    usageId: usage.id,
+  });
 
   return usage;
 }
@@ -225,7 +227,9 @@ export async function getPopularTemplates(limit = 10) {
     usageCount: u._count.templateId,
   }));
 
-  logger.info('Popular templates retrieved', { count: popularTemplates.length });
+  logger.info('Popular templates retrieved', {
+    count: popularTemplates.length,
+  });
 
   return popularTemplates;
 }
@@ -237,4 +241,3 @@ export default {
   getTemplateUsageStats,
   getPopularTemplates,
 };
-

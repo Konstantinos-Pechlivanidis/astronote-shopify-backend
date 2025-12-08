@@ -25,4 +25,3 @@ export function replacePlaceholders(message, contact) {
 
   return personalizedMessage;
 }
-

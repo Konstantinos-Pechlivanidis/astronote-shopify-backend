@@ -18,4 +18,3 @@ router.use(rateLimitConfig.sms);
 router.post('/', validateBody(optInSchema), handleOptIn);
 
 export default router;
-

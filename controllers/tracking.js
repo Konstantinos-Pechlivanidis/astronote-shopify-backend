@@ -69,7 +69,8 @@ export async function getMittoMessageStatus(req, res, next) {
             },
             data: {
               deliveryStatus: mittoStatus.deliveryStatus,
-              deliveredAt: mittoStatus.deliveryStatus === 'Delivered' ? new Date() : null,
+              deliveredAt:
+                mittoStatus.deliveryStatus === 'Delivered' ? new Date() : null,
             },
           });
 
@@ -166,10 +167,16 @@ export async function getCampaignDeliveryStatus(req, res, next) {
     const stats = {
       total: campaign.recipients.length,
       sent: campaign.recipients.filter(r => r.status === 'sent').length,
-      delivered: campaign.recipients.filter(r => r.deliveryStatus === 'Delivered').length,
-      failed: campaign.recipients.filter(r => r.deliveryStatus === 'Failed').length,
-      queued: campaign.recipients.filter(r => r.deliveryStatus === 'Queued').length,
-      pending: campaign.recipients.filter(r => !r.deliveryStatus || r.deliveryStatus === 'Queued').length,
+      delivered: campaign.recipients.filter(
+        r => r.deliveryStatus === 'Delivered',
+      ).length,
+      failed: campaign.recipients.filter(r => r.deliveryStatus === 'Failed')
+        .length,
+      queued: campaign.recipients.filter(r => r.deliveryStatus === 'Queued')
+        .length,
+      pending: campaign.recipients.filter(
+        r => !r.deliveryStatus || r.deliveryStatus === 'Queued',
+      ).length,
     };
 
     return sendSuccess(res, {
@@ -240,7 +247,8 @@ export async function bulkUpdateDeliveryStatus(req, res, next) {
             where: { id: recipient.id },
             data: {
               deliveryStatus: mittoStatus.deliveryStatus,
-              deliveredAt: mittoStatus.deliveryStatus === 'Delivered' ? new Date() : null,
+              deliveredAt:
+                mittoStatus.deliveryStatus === 'Delivered' ? new Date() : null,
             },
           });
         }

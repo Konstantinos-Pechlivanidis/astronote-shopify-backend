@@ -1,5 +1,8 @@
 import express from 'express';
-import { getUnsubscribeInfo, processUnsubscribe } from '../controllers/unsubscribe.js';
+import {
+  getUnsubscribeInfo,
+  processUnsubscribe,
+} from '../controllers/unsubscribe.js';
 
 const router = express.Router();
 

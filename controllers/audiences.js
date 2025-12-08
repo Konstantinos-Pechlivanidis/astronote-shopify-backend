@@ -78,7 +78,8 @@ export async function getAudiences(req, res, next) {
       {
         id: 'women',
         name: 'Women',
-        description: 'Female contacts who have opted in to receive SMS messages',
+        description:
+          'Female contacts who have opted in to receive SMS messages',
         type: 'predefined',
         contactCount: womenCount,
         isAvailable: womenCount > 0,
