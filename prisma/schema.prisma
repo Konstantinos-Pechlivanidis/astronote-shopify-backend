@@ -132,6 +132,8 @@ model CampaignRecipient {
   phoneE164      String
   status         String
   mittoMessageId String?
+  bulkId         String?  // Mitto bulkId for batch tracking (bulk SMS)
+  retryCount     Int      @default(0) // Track retry attempts for idempotency
   sentAt         DateTime?
   deliveredAt    DateTime?
   error          String?
@@ -144,14 +146,17 @@ model CampaignRecipient {
   @@index([campaignId, phoneE164]) // For quick lookups during SMS sending
   @@index([sentAt]) // For time-based queries
   @@index([status]) // For status-based filtering
+  @@index([bulkId]) // For batch-level queries (bulk SMS)
+  @@index([mittoMessageId]) // For DLR webhook lookups
 }
 
 model CampaignMetrics {
   id             String   @id @default(cuid())
   campaignId     String   @unique
-  totalSent      Int      @default(0)
+  totalSent      Int      @default(0) // Actually sent (status='sent') - Phase 2.2
   totalDelivered Int      @default(0)
   totalFailed    Int      @default(0)
+  totalProcessed Int      @default(0) // Processed = sent + failed (Phase 2.2)
   totalClicked   Int      @default(0)
   campaign       Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 }

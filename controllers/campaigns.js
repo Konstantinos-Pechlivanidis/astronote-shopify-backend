@@ -188,7 +188,83 @@ export async function prepare(req, res, next) {
 }
 
 /**
- * Send campaign immediately
+ * Enqueue campaign for bulk SMS sending (new bulk SMS architecture)
+ * @route POST /campaigns/:id/enqueue
+ */
+export async function enqueue(req, res, next) {
+  try {
+    const storeId = getStoreId(req);
+    const { id } = req.params;
+
+    const result = await campaignsService.enqueueCampaign(storeId, id);
+
+    if (!result.ok) {
+      // Map error reasons to appropriate HTTP status codes
+      if (result.reason === 'not_found') {
+        return res.status(404).json({
+          ok: false,
+          message: 'Campaign not found',
+          code: 'NOT_FOUND',
+        });
+      }
+      if (result.reason?.startsWith('invalid_status')) {
+        return res.status(409).json({
+          ok: false,
+          message: 'Campaign cannot be sent in its current state',
+          code: 'INVALID_STATUS',
+          reason: result.reason,
+        });
+      }
+      if (result.reason === 'no_recipients') {
+        return res.status(400).json({
+          ok: false,
+          message: 'No recipients found for this campaign',
+          code: 'NO_RECIPIENTS',
+        });
+      }
+      if (result.reason === 'inactive_subscription') {
+        return res.status(403).json({
+          ok: false,
+          message: 'Active subscription required to send SMS',
+          code: 'INACTIVE_SUBSCRIPTION',
+        });
+      }
+      if (result.reason === 'insufficient_credits') {
+        return res.status(402).json({
+          ok: false,
+          message: 'Insufficient credits to send campaign',
+          code: 'INSUFFICIENT_CREDITS',
+        });
+      }
+      return res.status(400).json({
+        ok: false,
+        message: result.reason || 'Campaign cannot be enqueued',
+        code: 'ENQUEUE_FAILED',
+      });
+    }
+
+    return res.json({
+      ok: true,
+      created: result.created,
+      enqueuedJobs: result.enqueuedJobs,
+      campaignId: result.campaignId,
+    });
+  } catch (error) {
+    logger.error('Enqueue campaign error', {
+      error: error.message,
+      stack: error.stack,
+      storeId: getStoreId(req),
+      campaignId: req.params.id,
+      requestId: req.id,
+      path: req.path,
+      method: req.method,
+    });
+    next(error);
+  }
+}
+
+/**
+ * Send campaign immediately (uses enqueueCampaign internally)
  * @route POST /campaigns/:id/send
  */
 export async function sendNow(req, res, next) {
@@ -196,6 +272,7 @@ export async function sendNow(req, res, next) {
     const storeId = getStoreId(req);
     const { id } = req.params;
 
+    // Use sendCampaign which internally calls enqueueCampaign
     const result = await campaignsService.sendCampaign(storeId, id);
 
     return sendSuccess(res, result, 'Campaign queued for sending');
@@ -259,6 +336,64 @@ export async function metrics(req, res, next) {
     return sendSuccess(res, metrics);
   } catch (error) {
     logger.error('Get campaign metrics error', {
+      error: error.message,
+      stack: error.stack,
+      storeId: getStoreId(req),
+      campaignId: req.params.id,
+      requestId: req.id,
+      path: req.path,
+      method: req.method,
+    });
+    next(error);
+  }
+}
+
+/**
+ * Get campaign status with Phase 2.2 metrics (queued, success, processed, failed)
+ * @route GET /campaigns/:id/status
+ */
+export async function status(req, res, next) {
+  try {
+    const storeId = getStoreId(req);
+    const { id } = req.params;
+
+    // Get campaign with metrics
+    const campaign = await campaignsService.getCampaignById(storeId, id);
+    const metrics = await campaignsService.getCampaignMetrics(storeId, id);
+
+    // Count queued recipients (status='pending')
+    const prisma = (await import('../services/prisma.js')).default;
+    const queuedCount = await prisma.campaignRecipient.count({
+      where: {
+        campaignId: id,
+        status: 'pending',
+      },
+    });
+
+    // Phase 2.2 metrics format
+    const statusSummary = {
+      campaign: {
+        id: campaign.id,
+        name: campaign.name,
+        status: campaign.status,
+        total: campaign.recipientCount || 0,
+        sent: metrics.totalSent || 0,
+        failed: metrics.totalFailed || 0,
+        processed: metrics.totalProcessed || 0,
+        createdAt: campaign.createdAt,
+        updatedAt: campaign.updatedAt,
+      },
+      metrics: {
+        queued: queuedCount,
+        success: metrics.totalSent || 0, // Successfully sent (Phase 2.2)
+        processed: metrics.totalProcessed || 0, // Processed (success + failed) (Phase 2.2)
+        failed: metrics.totalFailed || 0, // Failed (Phase 2.2)
+      },
+    };
+
+    return sendSuccess(res, statusSummary);
+  } catch (error) {
+    logger.error('Get campaign status error', {
       error: error.message,
       stack: error.stack,
       storeId: getStoreId(req),
@@ -357,9 +492,11 @@ export default {
   update,
   remove,
   prepare,
+  enqueue,
   sendNow,
   schedule,
   metrics,
+  status,
   stats,
   retryFailed,
   updateDeliveryStatus,

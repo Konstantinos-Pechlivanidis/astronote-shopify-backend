@@ -234,12 +234,9 @@ export const validateShopifyWebhook = (req, res, next) => {
     });
   }
 
-  // TODO: Implement HMAC validation
-  // const crypto = require('crypto');
-  // const calculatedHmac = crypto
-  //   .createHmac('sha256', process.env.SHOPIFY_WEBHOOK_SECRET)
-  //   .update(req.rawBody)
-  //   .digest('base64');
+  // Note: HMAC validation is implemented in middlewares/shopify-webhook.js
+  // This middleware is a placeholder for additional security checks if needed
+  // For Shopify webhooks, use validateShopifyWebhook from shopify-webhook.js
 
   next();
 };

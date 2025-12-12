@@ -36,6 +36,7 @@ import discountsRoutes from './routes/discounts.js';
 import billingRoutes from './routes/billing.js';
 import subscriptionRoutes from './routes/subscriptions.js';
 import mittoRoutes from './routes/mitto.js';
+import mittoStatusRoutes from './routes/mitto-status.js';
 import trackingRoutes from './routes/tracking.js';
 import settingsRoutes from './routes/settings.js';
 import stripeWebhookRoutes from './routes/stripe-webhooks.js';
@@ -185,6 +186,7 @@ app.use(
 
 // mount
 app.use('/', mittoRoutes); // Mitto webhooks (no auth)
+app.use('/api/mitto', resolveStore, requireStore, mittoStatusRoutes); // Mitto status refresh (requires auth)
 app.use('/', coreRoutes); // health, webhooks, auth helpers
 app.use('/api/opt-in', optInRoutes); // Public opt-in endpoint (no auth)
 if (process.env.NODE_ENV !== 'production') app.use('/', docsRoutes); // Swagger UI (dev only)

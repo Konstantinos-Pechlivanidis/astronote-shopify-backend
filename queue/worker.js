@@ -1,6 +1,7 @@
 import { Worker } from 'bullmq';
 import { queueRedis } from '../config/redis.js';
 import { handleMittoSend } from './jobs/mittoSend.js';
+import { handleBulkSMS } from './jobs/bulkSms.js';
 import {
   handleCampaignStatusUpdate,
   handleAllCampaignsStatusUpdate,
@@ -41,13 +42,25 @@ class MockWorker {
 // SMS Worker
 // Optimized for high-volume SMS sending (500k+ SMS/day)
 // Concurrency and rate limits adjusted for Black Friday peak loads
+// Handles both individual SMS (sendSMS) and bulk SMS (sendBulkSMS) jobs
 export const smsWorker = skipWorkers
   ? new MockWorker('sms-send', () => {}, {})
   : new Worker(
     'sms-send',
     async job => {
-      logger.info(`Processing SMS job ${job.id}`, { jobData: job.data });
-      return await handleMittoSend(job);
+      logger.info(`Processing SMS job ${job.id}`, { jobData: job.data, jobName: job.name });
+
+      // Route to appropriate handler based on job name
+      if (job.name === 'sendBulkSMS') {
+        // Campaigns always use bulk SMS (sendBulkSMS job type)
+        return await handleBulkSMS(job);
+      } else if (job.name === 'sendSMS' || !job.name) {
+        // Individual jobs (sendSMS) are only for automations and test messages
+        return await handleMittoSend(job);
+      } else {
+        logger.warn({ jobId: job.id, jobName: job.name }, 'Unknown SMS job type, skipping');
+        return { ok: false, reason: 'Unknown job type' };
+      }
     },
     {
       connection: queueRedis,

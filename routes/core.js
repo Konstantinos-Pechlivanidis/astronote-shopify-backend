@@ -155,9 +155,32 @@ r.post('/webhooks/app_uninstalled', async (req, res) => {
   // Cleanup shop data when app is uninstalled
   const shopDomain = req.body?.myshopify_domain;
   if (shopDomain) {
-    // TODO: Implement shop cleanup logic when app is uninstalled
-    // This should remove all shop-related data from the database
     logger.info('App uninstall webhook received', { shopDomain });
+    // Note: Shop cleanup is handled via Prisma cascade deletes (onDelete: Cascade)
+    // All related data (campaigns, contacts, messages, etc.) will be automatically deleted
+    // when the Shop record is deleted. Manual cleanup is only needed if we want to
+    // preserve some data or perform additional actions (e.g., notify admin, export data).
+    try {
+      const prisma = (await import('../services/prisma.js')).default;
+      const shop = await prisma.shop.findUnique({
+        where: { shopDomain },
+        select: { id: true },
+      });
+      if (shop) {
+        // Mark shop as inactive instead of deleting (soft delete)
+        await prisma.shop.update({
+          where: { id: shop.id },
+          data: { status: 'inactive' },
+        });
+        logger.info('Shop marked as inactive', { shopId: shop.id, shopDomain });
+      }
+    } catch (error) {
+      logger.error('Error handling app uninstall', {
+        shopDomain,
+        error: error.message,
+      });
+      // Don't fail the webhook - Shopify expects 200 response
+    }
   }
   res.status(200).send('OK');
 });

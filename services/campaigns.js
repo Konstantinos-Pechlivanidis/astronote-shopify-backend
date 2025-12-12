@@ -1,15 +1,8 @@
 import prisma from './prisma.js';
 import { logger } from '../utils/logger.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
-import {
-  validateAndConsumeCredits,
-  InsufficientCreditsError,
-  refundCredits,
-} from './credit-validation.js';
+import { InsufficientCreditsError } from './credit-validation.js';
 import { smsQueue } from '../queue/index.js';
-import { appendUnsubscribeLink } from '../utils/unsubscribe.js';
-import { replacePlaceholders } from '../utils/personalization.js';
-import { getDiscountCode } from './shopify.js';
 
 /**
  * Campaigns Service
@@ -112,90 +105,6 @@ async function resolveRecipients(shopId, audience) {
   }
 
   return [];
-}
-
-/**
- * Stream recipients for large campaigns (prevents memory issues with 100k+ recipients)
- * @param {string} shopId - Store ID
- * @param {string} audience - Audience filter
- * @param {number} batchSize - Batch size for streaming (default: 1000)
- * @returns {AsyncGenerator<Array>} Generator that yields batches of recipients
- */
-async function* streamRecipients(shopId, audience, batchSize = 1000) {
-  logger.info('Streaming recipients', { shopId, audience, batchSize });
-
-  const base = normalizeAudienceQuery(audience);
-  let offset = 0;
-
-  if (base) {
-    // Stream contacts for predefined audiences
-    while (true) {
-      const batch = await prisma.contact.findMany({
-        where: { shopId, ...base },
-        select: { id: true, phoneE164: true, firstName: true, lastName: true },
-        take: batchSize,
-        skip: offset,
-      });
-
-      if (batch.length === 0) break;
-
-      yield batch.map(c => ({
-        contactId: c.id,
-        phoneE164: c.phoneE164,
-        firstName: c.firstName,
-        lastName: c.lastName,
-      }));
-      offset += batchSize;
-    }
-  } else if (audience.startsWith('segment:')) {
-    // Stream segment memberships
-    const segmentId = audience.split(':')[1];
-
-    // Validate segment
-    const segment = await prisma.segment.findFirst({
-      where: { id: segmentId, shopId },
-      select: { id: true },
-    });
-
-    if (!segment) {
-      logger.warn('Segment not found', { segmentId, shopId });
-      return;
-    }
-
-    while (true) {
-      const batch = await prisma.segmentMembership.findMany({
-        where: {
-          segmentId,
-          contact: {
-            shopId,
-            smsConsent: 'opted_in',
-          },
-        },
-        include: {
-          contact: {
-            select: {
-              id: true,
-              phoneE164: true,
-              firstName: true,
-              lastName: true,
-            },
-          },
-        },
-        take: batchSize,
-        skip: offset,
-      });
-
-      if (batch.length === 0) break;
-
-      yield batch.map(m => ({
-        contactId: m.contactId,
-        phoneE164: m.contact.phoneE164,
-        firstName: m.contact.firstName,
-        lastName: m.contact.lastName,
-      }));
-      offset += batchSize;
-    }
-  }
 }
 
 /**
@@ -741,367 +650,354 @@ export async function prepareCampaign(storeId, campaignId) {
 }
 
 /**
- * Send campaign immediately
+ * Enqueue campaign for bulk SMS sending (new bulk SMS architecture)
+ * This function replaces the old sendCampaign logic for bulk campaigns
+ * @param {string} storeId - Store ID
+ * @param {string} campaignId - Campaign ID
+ * @returns {Promise<Object>} Enqueue result
+ */
+export async function enqueueCampaign(storeId, campaignId) {
+  logger.info('Enqueuing campaign for bulk SMS', { storeId, campaignId });
+
+  // 0) Fetch campaign and build audience OUTSIDE transaction (heavy work)
+  const campaign = await prisma.campaign.findUnique({
+    where: { id: campaignId, shopId: storeId },
+  });
+
+  if (!campaign) {
+    return { ok: false, reason: 'not_found', enqueuedJobs: 0 };
+  }
+
+  if (!['draft', 'scheduled', 'paused'].includes(campaign.status)) {
+    return {
+      ok: false,
+      reason: `invalid_status:${campaign.status}`,
+      enqueuedJobs: 0,
+    };
+  }
+
+  // Build audience OUTSIDE transaction (this can be slow with many contacts)
+  let contacts = [];
+  try {
+    contacts = await resolveRecipients(storeId, campaign.audience);
+  } catch (error) {
+    logger.error(
+      { storeId, campaignId, error: error.message },
+      'Failed to resolve recipients',
+    );
+    await prisma.campaign.updateMany({
+      where: { id: campaign.id, shopId: storeId },
+      data: { status: 'failed', updatedAt: new Date() },
+    });
+    return { ok: false, reason: 'audience_resolution_failed', enqueuedJobs: 0 };
+  }
+
+  if (!contacts.length) {
+    logger.warn(
+      { storeId, campaignId },
+      'No eligible recipients found',
+    );
+    await prisma.campaign.updateMany({
+      where: { id: campaign.id, shopId: storeId },
+      data: { status: 'failed', updatedAt: new Date() },
+    });
+    return { ok: false, reason: 'no_recipients', enqueuedJobs: 0 };
+  }
+
+  logger.info(
+    { storeId, campaignId, recipientCount: contacts.length },
+    'Audience built, checking subscription and credits',
+  );
+
+  // 1) Check subscription status BEFORE starting any transaction
+  const { isSubscriptionActive } = await import('./subscription.js');
+  const subscriptionActive = await isSubscriptionActive(storeId);
+  if (!subscriptionActive) {
+    logger.warn(
+      { storeId, campaignId },
+      'Inactive subscription - campaign enqueue blocked',
+    );
+    return { ok: false, reason: 'inactive_subscription', enqueuedJobs: 0 };
+  }
+
+  // 2) Check credits BEFORE starting any transaction
+  const { getBalance } = await import('./wallet.js');
+  const currentBalance = await getBalance(storeId);
+  const requiredCredits = contacts.length;
+
+  if (currentBalance < requiredCredits) {
+    logger.warn(
+      { storeId, campaignId, currentBalance, requiredCredits },
+      'Insufficient credits',
+    );
+    return { ok: false, reason: 'insufficient_credits', enqueuedJobs: 0 };
+  }
+
+  // 3) Short transaction: only update campaign status (fast, no heavy work)
+  const txResult = await prisma.$transaction(
+    async tx => {
+      // Double-check status hasn't changed (optimistic locking)
+      const currentCamp = await tx.campaign.findUnique({
+        where: { id: campaignId },
+        select: { status: true, shopId: true },
+      });
+
+      if (!currentCamp) {
+        return { ok: false, reason: 'not_found' };
+      }
+
+      if (!['draft', 'scheduled', 'paused'].includes(currentCamp.status)) {
+        return { ok: false, reason: `invalid_status:${currentCamp.status}` };
+      }
+
+      // Update status atomically
+      const upd = await tx.campaign.updateMany({
+        where: {
+          id: campaignId,
+          status: { in: ['draft', 'scheduled', 'paused'] },
+        },
+        data: { status: 'sending', updatedAt: new Date() },
+      });
+
+      if (upd.count === 0) {
+        return { ok: false, reason: 'already_sending' };
+      }
+
+      return { ok: true };
+    },
+    {
+      timeout: 5000, // 5 second timeout (should be fast now)
+      maxWait: 5000,
+    },
+  );
+
+  if (!txResult.ok) {
+    return { ...txResult, enqueuedJobs: 0 };
+  }
+
+  // 4) Create recipient records and prepare messages
+  // Note: Credits are NOT debited here - they will be debited per message after successful send
+  const messageTemplate = campaign.message;
+
+  if (!messageTemplate || !messageTemplate.trim()) {
+    logger.error({ storeId, campaignId }, 'Campaign has no message text');
+    await prisma.campaign.updateMany({
+      where: { id: campaign.id, shopId: storeId },
+      data: { status: 'failed', updatedAt: new Date() },
+    });
+    return { ok: false, reason: 'no_message_text', enqueuedJobs: 0 };
+  }
+
+  // Generate recipient records
+  // Note: Message personalization (including discount codes) and unsubscribe links
+  // are added in the worker (see queue/jobs/bulkSms.js) to avoid storing
+  // full message text in DB
+  const recipientsData = contacts.map(contact => {
+    // Note: Message personalization and unsubscribe links are added in the worker
+    // (see queue/jobs/bulkSms.js) to avoid storing full message text in DB
+    return {
+      campaignId: campaign.id,
+      contactId: contact.contactId,
+      phoneE164: contact.phoneE164,
+      status: 'pending', // Will be updated to 'sent' or 'failed' by worker
+      retryCount: 0,
+    };
+  });
+
+  try {
+    // For large campaigns (>10k recipients), batch the createMany operation
+    const BATCH_SIZE = 10000;
+    const recipientCount = recipientsData.length;
+
+    if (recipientCount > BATCH_SIZE) {
+      logger.info(
+        { storeId, campaignId, recipientCount },
+        'Large campaign detected, using batched inserts',
+      );
+
+      // Batch create recipients
+      for (let i = 0; i < recipientsData.length; i += BATCH_SIZE) {
+        const batch = recipientsData.slice(i, i + BATCH_SIZE);
+        await prisma.campaignRecipient.createMany({
+          data: batch,
+          skipDuplicates: true,
+        });
+        logger.debug(
+          {
+            storeId,
+            campaignId,
+            batch: Math.floor(i / BATCH_SIZE) + 1,
+            totalBatches: Math.ceil(recipientCount / BATCH_SIZE),
+          },
+          'Batch inserted',
+        );
+      }
+    } else {
+      // For smaller campaigns, use single createMany
+      await prisma.campaignRecipient.createMany({
+        data: recipientsData,
+        skipDuplicates: true,
+      });
+    }
+  } catch (e) {
+    logger.error(
+      { storeId, campaignId, err: e.message, contactCount: contacts.length },
+      'Failed to create campaign recipients',
+    );
+    // Revert campaign status
+    await prisma.campaign.updateMany({
+      where: { id: campaign.id, shopId: storeId },
+      data: { status: 'draft', updatedAt: new Date() },
+    });
+    throw e;
+  }
+
+  // 5) Enqueue jobs to Redis (OUTSIDE transaction, non-blocking)
+  // Campaigns always use bulk SMS with fixed batch size
+  const toEnqueue = await prisma.campaignRecipient.findMany({
+    where: {
+      campaignId: campaign.id,
+      status: 'pending',
+      mittoMessageId: null, // Idempotency: only process unsent
+    },
+    select: { id: true },
+  });
+
+  let enqueuedJobs = 0;
+  if (smsQueue && toEnqueue.length > 0) {
+    // Fixed batch size for bulk SMS
+    const SMS_BATCH_SIZE = Number(process.env.SMS_BATCH_SIZE || 5000);
+
+    // Group recipients into fixed-size batches
+    const batches = [];
+    for (let i = 0; i < toEnqueue.length; i += SMS_BATCH_SIZE) {
+      batches.push(toEnqueue.slice(i, i + SMS_BATCH_SIZE).map(r => r.id));
+    }
+
+    logger.info(
+      {
+        storeId,
+        campaignId,
+        totalRecipients: toEnqueue.length,
+        batchCount: batches.length,
+        batchSize: SMS_BATCH_SIZE,
+      },
+      'Enqueuing bulk SMS batch jobs',
+    );
+
+    // Enqueue batch jobs
+    const enqueuePromises = batches.map((recipientIds, batchIndex) =>
+      smsQueue
+        .add(
+          'sendBulkSMS',
+          {
+            campaignId: campaign.id,
+            shopId: storeId,
+            recipientIds,
+          },
+          {
+            jobId: `batch:${campaign.id}:${Date.now()}:${batchIndex}`,
+            attempts: 5,
+            backoff: { type: 'exponential', delay: 3000 },
+          },
+        )
+        .then(() => {
+          enqueuedJobs += recipientIds.length;
+          logger.debug(
+            { storeId, campaignId, batchIndex, recipientCount: recipientIds.length },
+            'Batch job enqueued',
+          );
+        })
+        .catch(err => {
+          logger.error(
+            { storeId, campaignId, batchIndex, err: err.message },
+            'Failed to enqueue batch job',
+          );
+          // Continue even if some batches fail to enqueue
+        }),
+    );
+
+    // Wait for initial batches (first 10) to ensure some jobs are enqueued
+    try {
+      await Promise.all(
+        enqueuePromises.slice(0, Math.min(10, enqueuePromises.length)),
+      );
+    } catch (err) {
+      logger.error(
+        { storeId, campaignId, err: err.message },
+        'Some batch jobs failed to enqueue initially',
+      );
+    }
+
+    // Continue enqueuing remaining batches in background (fire and forget)
+    if (enqueuePromises.length > 10) {
+      Promise.all(enqueuePromises.slice(10)).catch(err => {
+        logger.error(
+          { storeId, campaignId, err: err.message },
+          'Some background batch jobs failed to enqueue',
+        );
+      });
+    }
+  } else {
+    logger.warn(
+      'SMS queue not available — recipients created but not enqueued',
+    );
+  }
+
+  logger.info(
+    {
+      storeId,
+      campaignId,
+      created: recipientsData.length,
+      enqueuedJobs,
+    },
+    'Campaign enqueued successfully',
+  );
+
+  return {
+    ok: true,
+    created: recipientsData.length,
+    enqueuedJobs,
+    campaignId: campaign.id,
+  };
+}
+
+/**
+ * Send campaign immediately (now uses bulk SMS via enqueueCampaign)
  * @param {string} storeId - Store ID
  * @param {string} campaignId - Campaign ID
  * @returns {Promise<Object>} Send result
  */
 export async function sendCampaign(storeId, campaignId) {
-  logger.info('Sending campaign', { storeId, campaignId });
+  logger.info('Sending campaign (bulk SMS)', { storeId, campaignId });
 
-  const campaign = await prisma.campaign.findFirst({
-    where: { id: campaignId, shopId: storeId },
-  });
+  // Use new bulk SMS enqueue function
+  const result = await enqueueCampaign(storeId, campaignId);
 
-  if (!campaign) {
-    throw new NotFoundError('Campaign');
-  }
-
-  // Allow 'draft', 'scheduled', and 'sending' campaigns to be sent
-  // 'draft' campaigns are sent immediately (Send Now)
-  // 'scheduled' campaigns are sent when their scheduleAt time arrives
-  // 'sending' status means the scheduler already queued it (prevents duplicate processing)
-  if (
-    campaign.status !== 'draft' &&
-    campaign.status !== 'scheduled' &&
-    campaign.status !== 'sending'
-  ) {
+  if (!result.ok) {
+    // Map error reasons to appropriate errors
+    if (result.reason === 'not_found') {
+      throw new NotFoundError('Campaign');
+    }
+    if (result.reason === 'inactive_subscription') {
+      throw new ValidationError(
+        'Active subscription required to send SMS. Please subscribe to a plan.',
+      );
+    }
+    if (result.reason === 'insufficient_credits') {
+      throw new InsufficientCreditsError(0, 0); // Will be handled by caller
+    }
     throw new ValidationError(
-      'Only draft, scheduled, or sending campaigns can be sent',
+      `Campaign cannot be sent: ${result.reason}`,
     );
   }
 
-  // Get recipient count first (for credit validation)
-  // Use efficient count query first, then resolve recipients for actual sending
-  let recipients = [];
-  let recipientCount = 0;
-
-  // First, get count using efficient count query
-  const base = normalizeAudienceQuery(campaign.audience);
-  if (base) {
-    recipientCount = await prisma.contact.count({
-      where: { shopId: storeId, ...base },
-    });
-  } else if (campaign.audience.startsWith('segment:')) {
-    const segmentId = campaign.audience.split(':')[1];
-    recipientCount = await prisma.segmentMembership.count({
-      where: {
-        segmentId,
-        contact: {
-          shopId: storeId,
-          smsConsent: 'opted_in',
-        },
-      },
-    });
-  }
-
-  if (recipientCount === 0) {
-    throw new ValidationError('No recipients found for this campaign');
-  }
-
-  logger.info('Recipient count calculated', {
-    storeId,
-    campaignId,
-    audience: campaign.audience,
-    recipientCount,
-  });
-
-  // Validate and consume credits upfront
-  // If campaign fails before any SMS is sent, credits will be refunded
-  let creditsConsumed = false;
-  await validateAndConsumeCredits(
-    storeId,
-    recipientCount,
-    `campaign:${campaignId}`,
-  );
-  creditsConsumed = true;
-
-  // Update campaign status
-  try {
-    await prisma.campaign.update({
-      where: { id: campaignId },
-      data: { status: 'sending' },
-    });
-  } catch (error) {
-    // If status update fails, refund credits
-    if (creditsConsumed) {
-      logger.error('Campaign status update failed, refunding credits', {
-        storeId,
-        campaignId,
-        recipientCount,
-        error: error.message,
-      });
-      await refundCredits(
-        storeId,
-        recipientCount,
-        `campaign:${campaignId}:rollback:status_update_failed`,
-      );
-    }
-    throw error;
-  }
-
-  // Get sender configuration for the shop
-  const shopSettings = await prisma.shopSettings.findUnique({
-    where: { shopId: storeId },
-    select: { senderName: true, senderNumber: true },
-  });
-  const sender =
-    shopSettings?.senderName ||
-    shopSettings?.senderNumber ||
-    process.env.MITTO_SENDER_NAME ||
-    'Astronote';
-
-  // Use streaming for large campaigns to avoid memory issues
-  // For campaigns with 10k+ recipients, use streaming
-  const USE_STREAMING = recipientCount > 10000;
-  const BATCH_SIZE = 1000;
-  let totalQueued = 0;
-  let totalRecipientsCreated = 0;
-
-  // Fetch discount code if campaign has a discountId (fetch once, use for all recipients)
-  let discountCode = '';
-  if (campaign.discountId) {
-    try {
-      // Get shop domain from store
-      const store = await prisma.shop.findUnique({
-        where: { id: storeId },
-        select: { shopDomain: true },
-      });
-
-      if (store?.shopDomain) {
-        const discount = await getDiscountCode(
-          store.shopDomain,
-          campaign.discountId,
-        );
-        discountCode = discount?.code || '';
-        logger.info('Discount code fetched for campaign', {
-          storeId,
-          campaignId,
-          discountId: campaign.discountId,
-          discountCode,
-        });
-      } else {
-        logger.warn('Shop domain not found, cannot fetch discount code', {
-          storeId,
-          campaignId,
-          discountId: campaign.discountId,
-        });
-      }
-    } catch (error) {
-      // Log error but continue sending campaign without discount code
-      logger.error('Failed to fetch discount code for campaign', {
-        storeId,
-        campaignId,
-        discountId: campaign.discountId,
-        error: error.message,
-      });
-      // Continue with empty discount code
-    }
-  }
-
-  try {
-    if (USE_STREAMING) {
-      logger.info('Using stream processing for large campaign', {
-        campaignId,
-        recipientCount,
-      });
-
-      // Stream recipients and process in batches
-      for await (const recipientBatch of streamRecipients(
-        storeId,
-        campaign.audience,
-        BATCH_SIZE,
-      )) {
-        // Create recipient records in batch
-        await prisma.campaignRecipient.createMany({
-          data: recipientBatch.map(r => ({
-            campaignId,
-            contactId: r.contactId,
-            phoneE164: r.phoneE164,
-            status: 'pending',
-          })),
-        });
-        totalRecipientsCreated += recipientBatch.length;
-
-        // Queue SMS jobs in batch
-        // Get frontend base URL for unsubscribe links
-        const frontendBaseUrl =
-          process.env.FRONTEND_URL ||
-          process.env.FRONTEND_BASE_URL ||
-          'https://astronote-shopify-frontend.onrender.com';
-
-        const smsJobs = recipientBatch.map(recipient => {
-          // Replace personalization placeholders with contact data and discount code
-          const personalizedMessage = replacePlaceholders(campaign.message, {
-            firstName: recipient.firstName,
-            lastName: recipient.lastName,
-            discountCode,
-          });
-
-          // Append unsubscribe link to message
-          const messageWithUnsubscribe = appendUnsubscribeLink(
-            personalizedMessage,
-            recipient.contactId,
-            storeId,
-            recipient.phoneE164,
-            frontendBaseUrl,
-          );
-
-          return {
-            name: 'sms-send',
-            data: {
-              campaignId,
-              shopId: storeId,
-              phoneE164: recipient.phoneE164,
-              message: messageWithUnsubscribe,
-              sender,
-            },
-          };
-        });
-
-        await smsQueue.addBulk(smsJobs);
-        totalQueued += smsJobs.length;
-
-        logger.info(`Streamed batch ${Math.floor(totalQueued / BATCH_SIZE)}`, {
-          batchSize: recipientBatch.length,
-          totalQueued,
-          totalRecipientsCreated,
-          total: recipientCount,
-        });
-      }
-    } else {
-      // For smaller campaigns, load all recipients at once (faster for < 10k)
-      // Resolve recipients if not already resolved
-      if (recipients.length === 0) {
-        recipients = await resolveRecipients(storeId, campaign.audience);
-      }
-
-      if (recipients.length === 0) {
-        logger.warn('No recipients resolved for campaign', {
-          storeId,
-          campaignId,
-          audience: campaign.audience,
-        });
-        throw new ValidationError('No recipients found for this campaign');
-      }
-
-      // Create recipient records
-      await prisma.campaignRecipient.createMany({
-        data: recipients.map(r => ({
-          campaignId,
-          contactId: r.contactId,
-          phoneE164: r.phoneE164,
-          status: 'pending',
-        })),
-      });
-      totalRecipientsCreated = recipients.length;
-
-      // Queue SMS jobs in batches
-      // Get frontend base URL for unsubscribe links
-      const frontendBaseUrl =
-        process.env.FRONTEND_URL ||
-        process.env.FRONTEND_BASE_URL ||
-        'https://astronote-shopify-frontend.onrender.com';
-
-      const smsJobs = recipients.map(recipient => {
-        // Replace personalization placeholders with contact data and discount code
-        const personalizedMessage = replacePlaceholders(campaign.message, {
-          firstName: recipient.firstName,
-          lastName: recipient.lastName,
-          discountCode,
-        });
-
-        // Append unsubscribe link to message
-        const messageWithUnsubscribe = appendUnsubscribeLink(
-          personalizedMessage,
-          recipient.contactId,
-          storeId,
-          recipient.phoneE164,
-          frontendBaseUrl,
-        );
-
-        return {
-          name: 'sms-send',
-          data: {
-            campaignId,
-            shopId: storeId,
-            phoneE164: recipient.phoneE164,
-            message: messageWithUnsubscribe,
-            sender,
-          },
-        };
-      });
-
-      if (smsJobs.length > 0) {
-        for (let i = 0; i < smsJobs.length; i += BATCH_SIZE) {
-          const batch = smsJobs.slice(i, i + BATCH_SIZE);
-          await smsQueue.addBulk(batch);
-          totalQueued += batch.length;
-        }
-        logger.info('SMS jobs queued', {
-          storeId,
-          campaignId,
-          totalQueued,
-          batchCount: Math.ceil(smsJobs.length / BATCH_SIZE),
-        });
-      } else {
-        logger.warn('No SMS jobs to queue', {
-          storeId,
-          campaignId,
-          recipientCount,
-          recipientsLength: recipients.length,
-        });
-      }
-    }
-
-    logger.info('Campaign queued for sending', {
-      storeId,
-      campaignId,
-      recipientCount,
-      jobsQueued: totalQueued,
-      batches: Math.ceil(totalRecipientsCreated / BATCH_SIZE),
-    });
-
-    return {
-      campaignId,
-      recipientCount,
-      status: 'sending',
-      queuedAt: new Date(),
-    };
-  } catch (error) {
-    // If campaign queuing fails after credits consumed, refund credits
-    // Only refund if no SMS jobs were queued (i.e., campaign failed before any SMS sent)
-    if (creditsConsumed && totalQueued === 0) {
-      logger.error('Campaign queuing failed, refunding credits', {
-        storeId,
-        campaignId,
-        recipientCount,
-        totalQueued,
-        error: error.message,
-      });
-      try {
-        await refundCredits(
-          storeId,
-          recipientCount,
-          `campaign:${campaignId}:rollback:queuing_failed`,
-        );
-        // Revert campaign status to draft
-        await prisma.campaign.update({
-          where: { id: campaignId },
-          data: { status: 'draft' },
-        });
-      } catch (refundError) {
-        logger.error('Failed to refund credits after campaign failure', {
-          storeId,
-          campaignId,
-          recipientCount,
-          refundError: refundError.message,
-        });
-        // Log but don't throw - the original error is more important
-      }
-    }
-    throw error;
-  }
+  return {
+    campaignId: result.campaignId,
+    recipientCount: result.created,
+    status: 'sending',
+    queuedAt: new Date(),
+  };
 }
 
 /**

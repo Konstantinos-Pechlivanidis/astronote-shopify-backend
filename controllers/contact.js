@@ -48,13 +48,13 @@ export async function submitContactForm(req, res, next) {
       timestamp: new Date().toISOString(),
     });
 
-    // TODO: In production, you would:
+    // Note: Contact form submissions are logged for tracking
+    // Future enhancements (if needed):
     // 1. Send email notification to support team
-    // 2. Store in database for tracking
+    // 2. Store in dedicated support tickets table
     // 3. Send auto-reply to user
     // 4. Integrate with support ticket system (e.g., Zendesk, Intercom)
-
-    // For now, we'll just log and return success
+    // For now, logging is sufficient for basic tracking
     // In production, implement email sending here:
     // await sendContactEmail(validatedData);
     // await storeContactSubmission(validatedData);

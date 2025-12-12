@@ -58,7 +58,16 @@ r.delete('/:id', invalidateCampaignsCache, ctrl.remove);
 // POST /campaigns/:id/prepare - Prepare campaign for sending
 r.post('/:id/prepare', ctrl.prepare);
 
+// POST /campaigns/:id/enqueue - Enqueue campaign for bulk SMS (new bulk SMS architecture)
+r.post(
+  '/:id/enqueue',
+  campaignSendRateLimit,
+  invalidateCampaignsCache,
+  ctrl.enqueue,
+);
+
 // POST /campaigns/:id/send - Send campaign immediately (stricter rate limit)
+// Uses enqueueCampaign internally for bulk SMS
 r.post(
   '/:id/send',
   campaignSendRateLimit,
@@ -76,6 +85,9 @@ r.put(
 
 // GET /campaigns/:id/metrics - Get campaign metrics
 r.get('/:id/metrics', campaignMetricsCache, ctrl.metrics);
+
+// GET /campaigns/:id/status - Get campaign status with Phase 2.2 metrics
+r.get('/:id/status', campaignMetricsCache, ctrl.status);
 
 // POST /campaigns/:id/retry-failed - Retry failed SMS for a campaign
 r.post('/:id/retry-failed', invalidateCampaignsCache, ctrl.retryFailed);

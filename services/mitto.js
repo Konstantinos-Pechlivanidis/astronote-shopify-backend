@@ -191,6 +191,92 @@ export async function sendSms({
 }
 
 /**
+ * Send bulk SMS messages via Mitto using the new bulk endpoint
+ * @param {Array<Object>} messages - Array of message objects
+ * @param {string} messages[].trafficAccountId - Traffic account ID
+ * @param {string} messages[].destination - Recipient phone number (E.164)
+ * @param {Object} messages[].sms - SMS object
+ * @param {string} messages[].sms.text - Message text
+ * @param {string} messages[].sms.sender - Sender name
+ * @returns {Promise<{bulkId: string, messages: Array}>} Response with bulkId and messages array
+ */
+export async function sendBulkMessages(messages) {
+  if (!messages || !Array.isArray(messages) || messages.length === 0) {
+    throw new ValidationError('messages array is required and must not be empty');
+  }
+
+  // Validate all messages have required fields
+  for (const msg of messages) {
+    if (!msg.trafficAccountId || !msg.destination || !msg.sms || !msg.sms.text) {
+      throw new ValidationError('Each message must have trafficAccountId, destination, and sms.text');
+    }
+    if (!validateE164PhoneNumber(msg.destination)) {
+      throw new ValidationError(
+        `Invalid phone number format: ${msg.destination}. Expected E.164 format.`,
+      );
+    }
+  }
+
+  logger.info('Sending bulk SMS via Mitto', {
+    messageCount: messages.length,
+    trafficAccountId: messages[0]?.trafficAccountId,
+  });
+
+  try {
+    const { data } = await mitto.post('/api/v1.1/Messages/sendmessagesbulk', {
+      messages,
+    });
+
+    // Validate response format
+    if (!data.bulkId) {
+      logger.error('Invalid Mitto bulk response format: missing bulkId', { response: data });
+      throw new MittoApiError(
+        'Invalid response from Mitto API: missing bulkId',
+        500,
+        data,
+      );
+    }
+
+    if (!data.messages || !Array.isArray(data.messages)) {
+      logger.error('Invalid Mitto bulk response format: missing messages array', {
+        response: data,
+      });
+      throw new MittoApiError(
+        'Invalid response from Mitto API: missing messages array',
+        500,
+        data,
+      );
+    }
+
+    logger.info('Bulk SMS sent successfully via Mitto', {
+      bulkId: data.bulkId,
+      messageCount: data.messages.length,
+    });
+
+    return {
+      bulkId: data.bulkId,
+      messages: data.messages,
+      rawResponse: data,
+    };
+  } catch (error) {
+    if (error instanceof ValidationError || error instanceof MittoApiError) {
+      throw error;
+    }
+
+    logger.error('Unexpected error in sendBulkMessages', {
+      error: error.message,
+      messageCount: messages.length,
+    });
+
+    throw new MittoApiError(
+      `Failed to send bulk SMS: ${error.message}`,
+      error.response?.status,
+      error.response?.data,
+    );
+  }
+}
+
+/**
  * Get message delivery status from Mitto API
  * @param {string} messageId - Mitto message ID
  * @returns {Promise<{messageId: string, deliveryStatus: string, createdAt: string, updatedAt: string}>}
@@ -226,4 +312,4 @@ export async function getMessageStatus(messageId) {
   }
 }
 
-export default { sendSms, getMessageStatus };
+export default { sendSms, sendBulkMessages, getMessageStatus };
