@@ -6,6 +6,7 @@ import { smsQueue } from '../queue/index.js';
 import { createHash } from 'crypto';
 import {
   CampaignStatus,
+  CampaignPriority,
   ScheduleType,
   SmsConsent,
 } from '../utils/prismaEnums.js';
@@ -501,6 +502,7 @@ export async function createCampaign(storeId, campaignData) {
           scheduleAt: scheduleAtDate,
           recurringDays: campaignData.recurringDays || null,
           status: CampaignStatus.draft,
+          priority: campaignData.priority || CampaignPriority.normal,
         },
       });
 
@@ -593,6 +595,16 @@ export async function updateCampaign(storeId, campaignId, campaignData) {
     updateData.audience = campaignData.audience;
   if (campaignData.discountId !== undefined)
     updateData.discountId = campaignData.discountId;
+  if (campaignData.priority !== undefined) {
+    // Validate priority value
+    const validPriorities = Object.values(CampaignPriority);
+    if (!validPriorities.includes(campaignData.priority)) {
+      throw new ValidationError(
+        `Invalid priority. Must be one of: ${validPriorities.join(', ')}`,
+      );
+    }
+    updateData.priority = campaignData.priority;
+  }
   if (campaignData.scheduleType !== undefined) {
     updateData.scheduleType = campaignData.scheduleType;
     // If changing from scheduled to immediate, clear scheduleAt and set status to draft
@@ -876,6 +888,14 @@ export async function enqueueCampaign(storeId, campaignId) {
   // 1) Fetch full campaign data and build audience OUTSIDE transaction (heavy work)
   const campaign = await prisma.campaign.findUnique({
     where: { id: campaignId, shopId: storeId },
+    select: {
+      id: true,
+      name: true,
+      message: true,
+      audience: true,
+      status: true,
+      priority: true,
+    },
   });
 
   if (!campaign) {
@@ -891,7 +911,7 @@ export async function enqueueCampaign(storeId, campaignId) {
       { storeId, campaignId, error: error.message },
       'Failed to resolve recipients',
     );
-    
+
     // Release credit reservation if it exists
     if (creditReservation) {
       try {
@@ -906,7 +926,7 @@ export async function enqueueCampaign(storeId, campaignId) {
         );
       }
     }
-    
+
     await prisma.campaign.updateMany({
       where: { id: campaign.id, shopId: storeId },
       data: { status: 'failed', updatedAt: new Date() },
@@ -919,7 +939,7 @@ export async function enqueueCampaign(storeId, campaignId) {
       { storeId, campaignId },
       'No eligible recipients found',
     );
-    
+
     // Release credit reservation
     if (creditReservation) {
       try {
@@ -934,7 +954,7 @@ export async function enqueueCampaign(storeId, campaignId) {
         );
       }
     }
-    
+
     await prisma.campaign.updateMany({
       where: { id: campaign.id, shopId: storeId },
       data: { status: 'failed', updatedAt: new Date() },
@@ -1148,7 +1168,7 @@ export async function enqueueCampaign(storeId, campaignId) {
 
     if (!messageTemplate || !messageTemplate.trim()) {
       logger.error({ storeId, campaignId }, 'Campaign has no message text');
-      
+
       // Release credit reservation
       if (creditReservation) {
         try {
@@ -1163,7 +1183,7 @@ export async function enqueueCampaign(storeId, campaignId) {
           );
         }
       }
-      
+
       await prisma.campaign.updateMany({
         where: { id: campaign.id, shopId: storeId },
         data: { status: CampaignStatus.failed, updatedAt: new Date() },
@@ -1227,7 +1247,7 @@ export async function enqueueCampaign(storeId, campaignId) {
         { storeId, campaignId, err: e.message, contactCount: contacts.length },
         'Failed to create campaign recipients',
       );
-      
+
       // Release credit reservation
       if (creditReservation) {
         try {
@@ -1242,7 +1262,7 @@ export async function enqueueCampaign(storeId, campaignId) {
           );
         }
       }
-      
+
       // Revert campaign status
       await prisma.campaign.updateMany({
         where: { id: campaign.id, shopId: storeId },
@@ -1423,6 +1443,15 @@ export async function enqueueCampaign(storeId, campaignId) {
           }
         }
 
+        // Map campaign priority to BullMQ priority (higher number = higher priority)
+        const priorityMap = {
+          low: 1,
+          normal: 5,
+          high: 10,
+          urgent: 20,
+        };
+        const queuePriority = priorityMap[campaign.priority || 'normal'] || 5;
+
         await smsQueue.add(
           'sendBulkSMS',
           {
@@ -1435,6 +1464,7 @@ export async function enqueueCampaign(storeId, campaignId) {
             // This ensures that even if removeOnComplete removes a job,
             // the same recipients won't be enqueued again with a different jobId
             jobId,
+            priority: queuePriority, // Higher priority campaigns processed first
             attempts: 5,
             backoff: { type: 'exponential', delay: 3000 },
             removeOnComplete: {

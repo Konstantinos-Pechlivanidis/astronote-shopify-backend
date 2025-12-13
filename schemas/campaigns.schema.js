@@ -18,6 +18,9 @@ const campaignStatusSchema = z.enum([
 // Schedule type validation
 const scheduleTypeSchema = z.enum(['immediate', 'scheduled', 'recurring']);
 
+// Campaign priority validation
+const campaignPrioritySchema = z.enum(['low', 'normal', 'high', 'urgent']);
+
 // Audience validation
 const audienceSchema = z.string().refine(
   val => {
@@ -72,6 +75,7 @@ export const createCampaignSchema = z
         message: 'Schedule date cannot be an empty string',
       }),
     recurringDays: z.number().int().positive().max(365).optional(),
+    priority: campaignPrioritySchema.default('normal'),
   })
   .refine(
     data => {
@@ -153,6 +157,7 @@ export const updateCampaignSchema = z
         message: 'Schedule date cannot be an empty string',
       }),
     recurringDays: z.number().int().positive().max(365).optional().nullable(),
+    priority: campaignPrioritySchema.optional(),
   })
   .refine(
     data => {

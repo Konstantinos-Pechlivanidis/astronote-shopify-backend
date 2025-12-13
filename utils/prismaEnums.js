@@ -24,6 +24,13 @@ export const CampaignStatus = {
   cancelled: 'cancelled',
 };
 
+export const CampaignPriority = {
+  low: 'low',
+  normal: 'normal',
+  high: 'high',
+  urgent: 'urgent',
+};
+
 // Schedule type enums
 export const ScheduleType = {
   immediate: 'immediate',
@@ -134,6 +141,12 @@ export const EnumValues = {
     sent: 'sent',
     failed: 'failed',
     cancelled: 'cancelled',
+  },
+  CampaignPriority: {
+    low: 'low',
+    normal: 'normal',
+    high: 'high',
+    urgent: 'urgent',
   },
   ScheduleType: {
     immediate: 'immediate',

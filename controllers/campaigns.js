@@ -355,7 +355,6 @@ export async function schedule(req, res, next) {
 export async function getQueueStats(req, res, next) {
   try {
     const { smsQueue } = await import('../queue/index.js');
-    const logger = (await import('../utils/logger.js')).logger;
 
     if (!smsQueue) {
       return res.status(503).json({
@@ -432,6 +431,61 @@ export async function metrics(req, res, next) {
     return sendSuccess(res, metrics);
   } catch (error) {
     logger.error('Get campaign metrics error', {
+      error: error.message,
+      stack: error.stack,
+      storeId: getStoreId(req),
+      campaignId: req.params.id,
+      requestId: req.id,
+      path: req.path,
+      method: req.method,
+    });
+    next(error);
+  }
+}
+
+/**
+ * Get campaign preview (recipient count and estimated cost)
+ * @route GET /campaigns/:id/preview
+ */
+export async function getCampaignPreview(req, res, next) {
+  try {
+    const storeId = getStoreId(req);
+    const { id } = req.params;
+
+    const result = await campaignsService.getCampaignPreview(storeId, id);
+
+    if (!result.ok) {
+      if (result.reason === 'not_found') {
+        return res.status(404).json({
+          ok: false,
+          message: 'Campaign not found',
+          code: 'NOT_FOUND',
+        });
+      }
+      if (result.reason === 'inactive_subscription') {
+        return res.status(403).json({
+          ok: false,
+          message: result.message || 'Active subscription required',
+          code: 'INACTIVE_SUBSCRIPTION',
+        });
+      }
+      if (result.reason === 'audience_resolution_failed') {
+        return res.status(400).json({
+          ok: false,
+          message: result.message || 'Failed to resolve recipients',
+          code: 'AUDIENCE_RESOLUTION_FAILED',
+        });
+      }
+      return res.status(400).json({
+        ok: false,
+        message: result.message || 'Failed to get campaign preview',
+        code: 'PREVIEW_FAILED',
+      });
+    }
+
+    return sendSuccess(res, result);
+  } catch (error) {
+    logger.error('Get campaign preview error', {
       error: error.message,
       stack: error.stack,
       storeId: getStoreId(req),
@@ -567,11 +621,11 @@ export async function getFailedRecipients(req, res, next) {
         failedAt: r.updatedAt,
         contact: r.contact
           ? {
-              id: r.contact.id,
-              firstName: r.contact.firstName,
-              lastName: r.contact.lastName,
-              email: r.contact.email,
-            }
+            id: r.contact.id,
+            firstName: r.contact.firstName,
+            lastName: r.contact.lastName,
+            email: r.contact.email,
+          }
           : null,
       })),
     });

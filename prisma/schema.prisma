@@ -63,6 +63,7 @@ model Contact {
   updatedAt   DateTime            @updatedAt
   smsConsent  SmsConsent          @default(unknown)
   recipients  CampaignRecipient[]
+  clickEvents ClickEvent[]
   shop        Shop                @relation(fields: [shopId], references: [id], onDelete: Cascade)
   memberships SegmentMembership[]
 
@@ -114,35 +115,39 @@ model Campaign {
   updatedAt          DateTime            @updatedAt
   scheduleType       ScheduleType
   status             CampaignStatus      @default(draft)
+  priority           CampaignPriority    @default(normal)
   shop               Shop                @relation(fields: [shopId], references: [id], onDelete: Cascade)
   metrics            CampaignMetrics?
   recipients         CampaignRecipient[]
   messages           MessageLog[]
   creditTransactions CreditTransaction[]
   creditReservations CreditReservation[]
+  ClickEvent         ClickEvent[]
 
   @@unique([shopId, name])
   @@index([shopId, status])
   @@index([shopId, createdAt])
   @@index([shopId, scheduleAt])
+  @@index([priority])
 }
 
 model CampaignRecipient {
-  id             String    @id @default(cuid())
+  id             String       @id @default(cuid())
   campaignId     String
   contactId      String?
   phoneE164      String
   status         String
   mittoMessageId String?
   bulkId         String? // Mitto bulkId for batch tracking (bulk SMS)
-  retryCount     Int       @default(0) // Track retry attempts for idempotency
+  retryCount     Int          @default(0) // Track retry attempts for idempotency
   sentAt         DateTime?
   deliveredAt    DateTime?
   error          String?
   deliveryStatus String? // Mitto delivery status: Delivered, Failed, Queued, etc.
   senderNumber   String? // Sender number used for this message
-  campaign       Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  contact        Contact?  @relation(fields: [contactId], references: [id])
+  campaign       Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact        Contact?     @relation(fields: [contactId], references: [id])
+  clickEvents    ClickEvent[]
 
   @@unique([campaignId, phoneE164]) // Prevent duplicate messages to same phone in same campaign
   @@index([campaignId, status]) // For filtering by campaign and status
@@ -162,6 +167,29 @@ model CampaignMetrics {
   totalProcessed Int      @default(0) // Processed = sent + failed (Phase 2.2)
   totalClicked   Int      @default(0)
   campaign       Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+}
+
+model ClickEvent {
+  id          String             @id @default(cuid())
+  campaignId  String
+  recipientId String? // Optional: link to CampaignRecipient
+  contactId   String? // Optional: link to Contact
+  phoneE164   String // Phone number that clicked
+  linkType    String             @default("unsubscribe") // unsubscribe, discount, etc.
+  clickedAt   DateTime           @default(now())
+  ipAddress   String? // Optional: IP address for analytics
+  userAgent   String? // Optional: User agent for analytics
+  campaign    Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  recipient   CampaignRecipient? @relation(fields: [recipientId], references: [id], onDelete: SetNull)
+  contact     Contact?           @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@unique([campaignId, recipientId, linkType]) // Prevent duplicate clicks for same campaign+recipient+linkType
+  @@index([campaignId])
+  @@index([recipientId])
+  @@index([contactId])
+  @@index([phoneE164])
+  @@index([clickedAt])
+  @@index([campaignId, clickedAt])
 }
 
 model MessageLog {
@@ -364,6 +392,13 @@ enum CampaignStatus {
   sent
   failed
   cancelled
+}
+
+enum CampaignPriority {
+  low
+  normal
+  high
+  urgent
 }
 
 enum ScheduleType {

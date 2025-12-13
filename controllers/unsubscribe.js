@@ -66,6 +66,67 @@ export async function getUnsubscribeInfo(req, res, next) {
       phoneE164: `${phoneE164.substring(0, 5)}***`,
     });
 
+    // Track click event (non-blocking)
+    try {
+      // Find recent campaigns that sent to this contact (last 30 days)
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const recentRecipients = await prisma.campaignRecipient.findMany({
+        where: {
+          contactId,
+          phoneE164,
+          status: 'sent',
+          sentAt: { gte: thirtyDaysAgo },
+        },
+        select: {
+          id: true,
+          campaignId: true,
+        },
+        take: 10, // Limit to most recent 10 campaigns
+      });
+
+      // Create click events for each campaign (avoid duplicates)
+      if (recentRecipients.length > 0) {
+        const clickEvents = recentRecipients.map(recipient => ({
+          campaignId: recipient.campaignId,
+          recipientId: recipient.id,
+          contactId,
+          phoneE164,
+          linkType: 'unsubscribe',
+          ipAddress: req.ip || req.headers['x-forwarded-for'] || null,
+          userAgent: req.headers['user-agent'] || null,
+        }));
+
+        // Use createMany with skipDuplicates to avoid duplicate clicks
+        await prisma.clickEvent.createMany({
+          data: clickEvents,
+          skipDuplicates: true, // Skip if same campaign+recipient+linkType already exists
+        });
+
+        // Update campaign metrics (increment totalClicked)
+        const campaignIds = [...new Set(recentRecipients.map(r => r.campaignId))];
+        await prisma.campaignMetrics.updateMany({
+          where: {
+            campaignId: { in: campaignIds },
+          },
+          data: {
+            totalClicked: { increment: 1 },
+          },
+        });
+
+        logger.debug('Click events tracked', {
+          contactId,
+          campaignCount: campaignIds.length,
+          clickEventsCount: clickEvents.length,
+        });
+      }
+    } catch (clickError) {
+      // Don't fail the request if click tracking fails
+      logger.warn('Failed to track click event', {
+        error: clickError.message,
+        contactId,
+      });
+    }
+
     return sendSuccess(res, {
       contact: {
         id: contact.id,
