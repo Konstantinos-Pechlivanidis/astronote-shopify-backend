@@ -33,6 +33,9 @@ r.get(
 // GET /campaigns/stats/summary - Get campaign statistics
 r.get('/stats/summary', campaignsListCache, ctrl.stats);
 
+// GET /campaigns/queue/stats - Get queue statistics (waiting, active, completed, failed)
+r.get('/queue/stats', ctrl.getQueueStats);
+
 // GET /campaigns/:id - Get single campaign
 r.get('/:id', ctrl.getOne);
 
@@ -67,6 +70,8 @@ r.post(
 );
 
 // POST /campaigns/:id/send - Send campaign immediately (stricter rate limit)
+// DEPRECATED: This endpoint is functionally identical to /enqueue
+// Both call enqueueCampaign internally. Use /enqueue for consistency.
 // Uses enqueueCampaign internally for bulk SMS
 r.post(
   '/:id/send',
@@ -83,11 +88,24 @@ r.put(
   ctrl.schedule,
 );
 
+// POST /campaigns/:id/cancel - Cancel a campaign that is currently sending
+r.post(
+  '/:id/cancel',
+  invalidateCampaignsCache,
+  ctrl.cancel,
+);
+
 // GET /campaigns/:id/metrics - Get campaign metrics
 r.get('/:id/metrics', campaignMetricsCache, ctrl.metrics);
 
 // GET /campaigns/:id/status - Get campaign status with Phase 2.2 metrics
 r.get('/:id/status', campaignMetricsCache, ctrl.status);
+
+// GET /campaigns/:id/preview - Get campaign preview (recipient count, estimated cost)
+r.get('/:id/preview', ctrl.getCampaignPreview);
+
+// GET /campaigns/:id/progress - Get campaign progress (sent, failed, pending, percentage)
+r.get('/:id/progress', campaignMetricsCache, ctrl.getCampaignProgress);
 
 // GET /campaigns/:id/failed-recipients - Get failed recipients for a campaign
 r.get('/:id/failed-recipients', ctrl.getFailedRecipients);

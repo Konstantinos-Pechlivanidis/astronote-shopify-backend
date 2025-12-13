@@ -891,6 +891,22 @@ export async function enqueueCampaign(storeId, campaignId) {
       { storeId, campaignId, error: error.message },
       'Failed to resolve recipients',
     );
+    
+    // Release credit reservation if it exists
+    if (creditReservation) {
+      try {
+        const { releaseCredits } = await import('./wallet.js');
+        await releaseCredits(creditReservation.id, {
+          reason: 'audience_resolution_failed',
+        });
+      } catch (releaseError) {
+        logger.error(
+          { storeId, campaignId, reservationId: creditReservation.id, error: releaseError.message },
+          'Failed to release credit reservation after audience resolution failure',
+        );
+      }
+    }
+    
     await prisma.campaign.updateMany({
       where: { id: campaign.id, shopId: storeId },
       data: { status: 'failed', updatedAt: new Date() },
@@ -903,11 +919,36 @@ export async function enqueueCampaign(storeId, campaignId) {
       { storeId, campaignId },
       'No eligible recipients found',
     );
+    
+    // Release credit reservation
+    if (creditReservation) {
+      try {
+        const { releaseCredits } = await import('./wallet.js');
+        await releaseCredits(creditReservation.id, {
+          reason: 'no_recipients',
+        });
+      } catch (releaseError) {
+        logger.error(
+          { storeId, campaignId, reservationId: creditReservation.id, error: releaseError.message },
+          'Failed to release credit reservation after no recipients',
+        );
+      }
+    }
+    
     await prisma.campaign.updateMany({
       where: { id: campaign.id, shopId: storeId },
       data: { status: 'failed', updatedAt: new Date() },
     });
-    return { ok: false, reason: 'no_recipients', enqueuedJobs: 0 };
+    return {
+      ok: false,
+      reason: 'no_recipients',
+      enqueuedJobs: 0,
+      message: 'No eligible recipients found for this campaign. Please check your audience filters or contact list.',
+      details: {
+        actionable: true,
+        action: 'check_audience',
+      },
+    };
   }
 
   logger.info(
@@ -936,18 +977,27 @@ export async function enqueueCampaign(storeId, campaignId) {
         updatedAt: new Date(),
       },
     });
-    return { ok: false, reason: 'inactive_subscription', enqueuedJobs: 0 };
+    return {
+      ok: false,
+      reason: 'inactive_subscription',
+      enqueuedJobs: 0,
+      message: 'Active subscription required to send SMS campaigns. Please subscribe to a plan to continue.',
+      details: {
+        actionable: true,
+        action: 'subscribe',
+      },
+    };
   }
 
-  // 2) Check credits BEFORE starting heavy work
-  const { getBalance } = await import('./wallet.js');
-  const currentBalance = await getBalance(storeId);
+  // 2) Check and reserve credits BEFORE starting heavy work
+  const { getAvailableBalance, reserveCredits } = await import('./wallet.js');
+  const availableBalance = await getAvailableBalance(storeId);
   const requiredCredits = contacts.length;
 
-  if (currentBalance < requiredCredits) {
+  if (availableBalance < requiredCredits) {
     logger.warn(
-      { storeId, campaignId, currentBalance, requiredCredits },
-      'Insufficient credits',
+      { storeId, campaignId, availableBalance, requiredCredits },
+      'Insufficient credits (including reservations)',
     );
     // Revert campaign status back to scheduled/draft
     await prisma.campaign.updateMany({
@@ -962,7 +1012,68 @@ export async function enqueueCampaign(storeId, campaignId) {
         updatedAt: new Date(),
       },
     });
-    return { ok: false, reason: 'insufficient_credits', enqueuedJobs: 0 };
+    return {
+      ok: false,
+      reason: 'insufficient_credits',
+      enqueuedJobs: 0,
+      message: `Insufficient credits. You have ${availableBalance} credits but need ${requiredCredits} credits to send this campaign.`,
+      details: {
+        availableCredits: availableBalance,
+        requiredCredits,
+        missingCredits: requiredCredits - availableBalance,
+        actionable: true,
+        action: 'purchase_credits',
+      },
+    };
+  }
+
+  // Reserve credits for this campaign (prevents depletion mid-campaign)
+  let creditReservation;
+  try {
+    creditReservation = await reserveCredits(storeId, requiredCredits, {
+      campaignId,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24h expiration
+      meta: {
+        campaignName: campaign.name,
+        recipientCount: contacts.length,
+      },
+    });
+    logger.info(
+      {
+        storeId,
+        campaignId,
+        reservationId: creditReservation.id,
+        amount: requiredCredits,
+      },
+      'Credits reserved for campaign',
+    );
+  } catch (reservationError) {
+    logger.error(
+      {
+        storeId,
+        campaignId,
+        error: reservationError.message,
+      },
+      'Failed to reserve credits',
+    );
+    // Revert campaign status
+    await prisma.campaign.updateMany({
+      where: {
+        id: campaignId,
+        shopId: storeId,
+        status: CampaignStatus.sending,
+      },
+      data: {
+        status:
+          statusTransitionResult.previousStatus || CampaignStatus.draft,
+        updatedAt: new Date(),
+      },
+    });
+    return {
+      ok: false,
+      reason: 'credit_reservation_failed',
+      enqueuedJobs: 0,
+    };
   }
 
   // If status was already 'sending', skip recipient creation and only enqueue existing pending recipients
@@ -1037,6 +1148,22 @@ export async function enqueueCampaign(storeId, campaignId) {
 
     if (!messageTemplate || !messageTemplate.trim()) {
       logger.error({ storeId, campaignId }, 'Campaign has no message text');
+      
+      // Release credit reservation
+      if (creditReservation) {
+        try {
+          const { releaseCredits } = await import('./wallet.js');
+          await releaseCredits(creditReservation.id, {
+            reason: 'no_message_text',
+          });
+        } catch (releaseError) {
+          logger.error(
+            { storeId, campaignId, reservationId: creditReservation.id, error: releaseError.message },
+            'Failed to release credit reservation after no message text',
+          );
+        }
+      }
+      
       await prisma.campaign.updateMany({
         where: { id: campaign.id, shopId: storeId },
         data: { status: CampaignStatus.failed, updatedAt: new Date() },
@@ -1100,6 +1227,22 @@ export async function enqueueCampaign(storeId, campaignId) {
         { storeId, campaignId, err: e.message, contactCount: contacts.length },
         'Failed to create campaign recipients',
       );
+      
+      // Release credit reservation
+      if (creditReservation) {
+        try {
+          const { releaseCredits } = await import('./wallet.js');
+          await releaseCredits(creditReservation.id, {
+            reason: 'recipient_creation_failed',
+          });
+        } catch (releaseError) {
+          logger.error(
+            { storeId, campaignId, reservationId: creditReservation.id, error: releaseError.message },
+            'Failed to release credit reservation after recipient creation failure',
+          );
+        }
+      }
+      
       // Revert campaign status
       await prisma.campaign.updateMany({
         where: { id: campaign.id, shopId: storeId },
@@ -1252,7 +1395,7 @@ export async function enqueueCampaign(storeId, campaignId) {
           },
           'Duplicate batch job detected (same recipients already enqueued), skipping',
         );
-        return; // Skip this batch
+        return { enqueued: false, skipped: true, recipientCount: recipientIds.length };
       }
 
       // Generate unique jobId based on recipientIds hash
@@ -1276,7 +1419,7 @@ export async function enqueueCampaign(storeId, campaignId) {
               },
               'Job with same jobId already exists, skipping duplicate',
             );
-            return; // Skip this batch
+            return { enqueued: false, skipped: true, recipientCount: recipientIds.length };
           }
         }
 
@@ -1302,7 +1445,6 @@ export async function enqueueCampaign(storeId, campaignId) {
           },
         );
 
-        enqueuedJobs += recipientIds.length;
         logger.debug(
           {
             storeId,
@@ -1313,6 +1455,7 @@ export async function enqueueCampaign(storeId, campaignId) {
           },
           'Batch job enqueued',
         );
+        return { enqueued: true, skipped: false, recipientCount: recipientIds.length };
       } catch (err) {
         // Check if error is due to duplicate jobId (BullMQ throws error for duplicate jobIds)
         if (err.message?.includes('already exists') || err.code === 'DUPLICATE_JOB') {
@@ -1326,6 +1469,7 @@ export async function enqueueCampaign(storeId, campaignId) {
             },
             'Job with same jobId already exists, skipping duplicate',
           );
+          return { enqueued: false, skipped: true, recipientCount: recipientIds.length };
         } else {
           logger.error(
             {
@@ -1338,30 +1482,46 @@ export async function enqueueCampaign(storeId, campaignId) {
             'Failed to enqueue batch job',
           );
           // Continue even if some batches fail to enqueue
+          return { enqueued: false, skipped: false, error: err.message, recipientCount: recipientIds.length };
         }
       }
     });
 
-    // Wait for initial batches (first 10) to ensure some jobs are enqueued
+    // Wait for all batches to complete and calculate enqueuedJobs from results
+    // This prevents race conditions in the counter and ensures accurate tracking
     try {
-      await Promise.all(
-        enqueuePromises.slice(0, Math.min(10, enqueuePromises.length)),
-      );
+      const results = await Promise.allSettled(enqueuePromises);
+
+      // Calculate enqueuedJobs from results (no race condition)
+      enqueuedJobs = results.reduce((total, result) => {
+        if (result.status === 'fulfilled' && result.value?.enqueued) {
+          return total + (result.value.recipientCount || 0);
+        }
+        return total;
+      }, 0);
+
+      // Log skipped and failed batches for debugging
+      const skippedBatches = results.filter(r => r.status === 'fulfilled' && r.value?.skipped).length;
+      const failedBatches = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && r.value?.error)).length;
+
+      if (skippedBatches > 0 || failedBatches > 0) {
+        logger.info(
+          {
+            storeId,
+            campaignId,
+            totalBatches: batches.length,
+            skippedBatches,
+            failedBatches,
+            enqueuedJobs,
+          },
+          'Batch enqueue completed with some skipped/failed batches',
+        );
+      }
     } catch (err) {
       logger.error(
         { storeId, campaignId, err: err.message },
-        'Some batch jobs failed to enqueue initially',
+        'Error waiting for batch jobs to enqueue',
       );
-    }
-
-    // Continue enqueuing remaining batches in background (fire and forget)
-    if (enqueuePromises.length > 10) {
-      Promise.all(enqueuePromises.slice(10)).catch(err => {
-        logger.error(
-          { storeId, campaignId, err: err.message },
-          'Some background batch jobs failed to enqueue',
-        );
-      });
     }
   } else {
     logger.warn(
@@ -1422,6 +1582,218 @@ export async function sendCampaign(storeId, campaignId) {
     recipientCount: result.created,
     status: CampaignStatus.sending,
     queuedAt: new Date(),
+  };
+}
+
+/**
+ * Cancel a campaign that is currently sending
+ * Stops processing remaining batches and releases credit reservation
+ * @param {string} storeId - Store ID
+ * @param {string} campaignId - Campaign ID
+ * @returns {Promise<Object>} Cancel result
+ */
+export async function cancelCampaign(storeId, campaignId) {
+  logger.info('Cancelling campaign', { storeId, campaignId });
+
+  // 1. Verify campaign exists and belongs to store
+  const campaign = await prisma.campaign.findFirst({
+    where: { id: campaignId, shopId: storeId },
+    select: { id: true, status: true },
+  });
+
+  if (!campaign) {
+    return { ok: false, reason: 'not_found' };
+  }
+
+  // 2. Only allow cancellation if campaign is in 'sending' status
+  if (campaign.status !== CampaignStatus.sending) {
+    return {
+      ok: false,
+      reason: `invalid_status:${campaign.status}`,
+      message: `Campaign cannot be cancelled in ${campaign.status} status`,
+    };
+  }
+
+  // 3. Update campaign status to 'cancelled'
+  await prisma.campaign.updateMany({
+    where: { id: campaignId, shopId: storeId, status: CampaignStatus.sending },
+    data: { status: CampaignStatus.cancelled, updatedAt: new Date() },
+  });
+
+  // 4. Remove pending jobs from queue
+  let removedJobs = 0;
+  if (smsQueue) {
+    try {
+      const [waiting, delayed] = await Promise.all([
+        smsQueue.getWaiting(),
+        smsQueue.getDelayed(),
+      ]);
+
+      const allPendingJobs = [...waiting, ...delayed];
+
+      for (const job of allPendingJobs) {
+        if (
+          job.name === 'sendBulkSMS' &&
+          job.data?.campaignId === campaignId
+        ) {
+          await job.remove();
+          removedJobs++;
+        }
+      }
+
+      logger.info(
+        { storeId, campaignId, removedJobs },
+        'Removed pending jobs from queue',
+      );
+    } catch (queueError) {
+      logger.error(
+        {
+          storeId,
+          campaignId,
+          error: queueError.message,
+        },
+        'Failed to remove jobs from queue',
+      );
+      // Continue even if queue removal fails
+    }
+  }
+
+  // 5. Mark pending recipients as cancelled
+  const cancelledCount = await prisma.campaignRecipient.updateMany({
+    where: {
+      campaignId,
+      status: 'pending',
+    },
+    data: {
+      status: 'cancelled',
+      updatedAt: new Date(),
+    },
+  });
+
+  logger.info(
+    { storeId, campaignId, cancelledRecipients: cancelledCount.count },
+    'Marked pending recipients as cancelled',
+  );
+
+  // 6. Release credit reservation
+  try {
+    const { releaseCredits } = await import('./wallet.js');
+    const reservation = await prisma.creditReservation.findFirst({
+      where: {
+        campaignId,
+        shopId: storeId,
+        status: 'active',
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (reservation) {
+      await releaseCredits(reservation.id, {
+        reason: 'campaign_cancelled',
+      });
+      logger.info(
+        { storeId, campaignId, reservationId: reservation.id },
+        'Credit reservation released after campaign cancellation',
+      );
+    }
+  } catch (releaseError) {
+    logger.error(
+      {
+        storeId,
+        campaignId,
+        error: releaseError.message,
+      },
+      'Failed to release credit reservation after cancellation',
+    );
+    // Continue even if release fails
+  }
+
+  // 7. Update campaign aggregates
+  try {
+    const { updateCampaignAggregates } = await import('./campaignAggregates.js');
+    await updateCampaignAggregates(campaignId, storeId);
+  } catch (aggError) {
+    logger.warn(
+      { storeId, campaignId, error: aggError.message },
+      'Failed to update campaign aggregates after cancellation',
+    );
+  }
+
+  return {
+    ok: true,
+    campaignId,
+    cancelledRecipients: cancelledCount.count,
+    removedJobs,
+  };
+}
+
+/**
+ * Get campaign preview (recipient count and estimated cost)
+ * Does not modify campaign status - safe to call multiple times
+ * @param {string} storeId - Store ID
+ * @param {string} campaignId - Campaign ID
+ * @returns {Promise<Object>} Preview data with recipient count and estimated cost
+ */
+export async function getCampaignPreview(storeId, campaignId) {
+  logger.info('Getting campaign preview', { storeId, campaignId });
+
+  // 1. Verify campaign exists and belongs to store
+  const campaign = await prisma.campaign.findFirst({
+    where: { id: campaignId, shopId: storeId },
+    select: {
+      id: true,
+      name: true,
+      message: true,
+      audience: true,
+      status: true,
+    },
+  });
+
+  if (!campaign) {
+    return { ok: false, reason: 'not_found' };
+  }
+
+  // 2. Check subscription status
+  const { isSubscriptionActive } = await import('./subscription.js');
+  const subscriptionActive = await isSubscriptionActive(storeId);
+  if (!subscriptionActive) {
+    return {
+      ok: false,
+      reason: 'inactive_subscription',
+      message: 'Active subscription required to send SMS',
+    };
+  }
+
+  // 3. Resolve recipients (same logic as enqueueCampaign)
+  let contacts = [];
+  try {
+    contacts = await resolveRecipients(storeId, campaign.audience);
+  } catch (error) {
+    logger.error(
+      { storeId, campaignId, error: error.message },
+      'Failed to resolve recipients for preview',
+    );
+    return {
+      ok: false,
+      reason: 'audience_resolution_failed',
+      message: 'Failed to resolve recipients',
+    };
+  }
+
+  // 4. Get available balance (including reservations)
+  const { getAvailableBalance } = await import('./wallet.js');
+  const availableBalance = await getAvailableBalance(storeId);
+  const requiredCredits = contacts.length;
+
+  // 5. Return preview data
+  return {
+    ok: true,
+    recipientCount: contacts.length,
+    estimatedCost: requiredCredits, // 1 credit per SMS
+    availableCredits: availableBalance,
+    canSend: contacts.length > 0 && availableBalance >= requiredCredits,
+    insufficientCredits: availableBalance < requiredCredits,
+    missingCredits: Math.max(0, requiredCredits - availableBalance),
   };
 }
 
@@ -1724,6 +2096,9 @@ export default {
   sendCampaign,
   enqueueCampaign,
   scheduleCampaign,
+  cancelCampaign,
+  getCampaignPreview,
   getCampaignMetrics,
   getCampaignStats,
+  retryFailedSms,
 };

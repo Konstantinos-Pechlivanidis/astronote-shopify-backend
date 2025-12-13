@@ -1,6 +1,7 @@
 import prisma from './prisma.js';
 import { logger } from '../utils/logger.js';
 import { CampaignStatus } from '../utils/prismaEnums.js';
+import { releaseCredits } from './wallet.js';
 
 /**
  * Update campaign aggregates (total, sent, failed, processed) from CampaignRecipient counts
@@ -97,6 +98,65 @@ export async function updateCampaignAggregates(campaignId, shopId) {
           updatedAt: new Date(),
         },
       });
+
+      // Release credit reservation when campaign completes (sent or failed)
+      // This happens only once when campaign transitions from 'sending' to final status
+      if (
+        campaignStatus === CampaignStatus.sent ||
+        campaignStatus === CampaignStatus.failed
+      ) {
+        try {
+          // Find active reservation for this campaign
+          const reservation = await prisma.creditReservation.findFirst({
+            where: {
+              campaignId,
+              shopId,
+              status: 'active',
+            },
+            orderBy: { createdAt: 'desc' },
+          });
+
+          if (reservation) {
+            // Calculate actual credits used (sent messages only)
+            const creditsUsed = success; // Only count successfully sent messages
+
+            // Release unused credits from reservation
+            // Note: Credits for sent messages are already debited in smsBulk.js
+            // We only need to release the reservation, not refund credits
+            await releaseCredits(reservation.id, {
+              reason: `campaign_${campaignStatus}`,
+            });
+
+            logger.info(
+              {
+                campaignId,
+                shopId,
+                reservationId: reservation.id,
+                reserved: reservation.amount,
+                creditsUsed,
+                creditsReleased: reservation.amount - creditsUsed,
+                campaignStatus,
+              },
+              'Credit reservation released after campaign completion',
+            );
+          } else {
+            logger.warn(
+              { campaignId, shopId },
+              'No active credit reservation found for campaign',
+            );
+          }
+        } catch (releaseError) {
+          // Don't fail aggregate update if credit release fails
+          logger.error(
+            {
+              campaignId,
+              shopId,
+              error: releaseError.message,
+            },
+            'Failed to release credit reservation',
+          );
+        }
+      }
     }
 
     logger.info({

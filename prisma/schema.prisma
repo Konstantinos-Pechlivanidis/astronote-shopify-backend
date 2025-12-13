@@ -29,6 +29,7 @@ model Shop {
   wallet                Wallet?
   transactions          WalletTransaction[]
   creditTransactions    CreditTransaction[]
+  creditReservations    CreditReservation[]
   billingTransactions   BillingTransaction[]
   purchases             Purchase[]
   settings              ShopSettings?
@@ -118,6 +119,7 @@ model Campaign {
   recipients         CampaignRecipient[]
   messages           MessageLog[]
   creditTransactions CreditTransaction[]
+  creditReservations CreditReservation[]
 
   @@unique([shopId, name])
   @@index([shopId, status])
@@ -483,6 +485,27 @@ model CreditTransaction {
   @@index([createdAt])
   @@index([reason])
   @@index([shopId, reason])
+}
+
+model CreditReservation {
+  id         String    @id @default(cuid())
+  shopId     String
+  shop       Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  campaignId String? // Optional: link to campaign
+  campaign   Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  amount     Int // Credits reserved
+  status     String    @default("active") // active, released, expired
+  expiresAt  DateTime? // Optional expiration
+  releasedAt DateTime? // When reservation was released
+  meta       Json? // Additional metadata
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([shopId])
+  @@index([campaignId])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([shopId, status])
 }
 
 model Template {

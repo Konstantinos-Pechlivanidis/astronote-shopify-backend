@@ -2,7 +2,7 @@
 // Bulk SMS sending service with credit enforcement
 
 import { sendBulkMessages } from './mitto.js';
-import { getBalance, debit } from './wallet.js';
+import { getAvailableBalance, debit } from './wallet.js';
 import { shortenUrlsInText } from '../utils/urlShortener.js';
 import { isSubscriptionActive } from './subscription.js';
 import { checkAllLimits } from './rateLimiter.js';
@@ -66,14 +66,16 @@ export async function sendBulkSMSWithCredits(messages) {
     };
   }
 
-  // 2. Check balance before sending (need credits for all messages)
-  const balance = await getBalance(shopId);
+  // 2. Check available balance before sending (balance minus active reservations)
+  // For campaigns, credits are already reserved, so this check ensures we have enough
+  // even with reservations in place
+  const availableBalance = await getAvailableBalance(shopId);
   const requiredCredits = messages.length;
 
-  if (balance < requiredCredits) {
+  if (availableBalance < requiredCredits) {
     logger.warn(
-      { shopId, balance, requiredCredits, messageCount: messages.length },
-      'Insufficient credits for bulk SMS send',
+      { shopId, availableBalance, requiredCredits, messageCount: messages.length },
+      'Insufficient available credits for bulk SMS send (including reservations)',
     );
     return {
       bulkId: null,
@@ -81,7 +83,7 @@ export async function sendBulkSMSWithCredits(messages) {
         internalRecipientId: msg.internalRecipientId,
         sent: false,
         reason: 'insufficient_credits',
-        balance,
+        availableBalance,
         error: 'Not enough credits to send SMS. Please purchase credits.',
       })),
       summary: {

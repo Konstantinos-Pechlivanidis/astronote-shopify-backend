@@ -240,14 +240,32 @@ export async function enqueue(req, res, next) {
       if (result.reason === 'insufficient_credits') {
         return res.status(402).json({
           ok: false,
-          message: 'Insufficient credits to send campaign',
+          message: result.message || 'Insufficient credits to send campaign',
           code: 'INSUFFICIENT_CREDITS',
+          details: result.details || {},
+        });
+      }
+      if (result.reason === 'no_recipients') {
+        return res.status(400).json({
+          ok: false,
+          message: result.message || 'No recipients found for this campaign',
+          code: 'NO_RECIPIENTS',
+          details: result.details || {},
+        });
+      }
+      if (result.reason === 'audience_resolution_failed') {
+        return res.status(400).json({
+          ok: false,
+          message: result.message || 'Failed to resolve campaign audience',
+          code: 'AUDIENCE_RESOLUTION_FAILED',
+          details: result.details || {},
         });
       }
       return res.status(400).json({
         ok: false,
-        message: result.reason || 'Campaign cannot be enqueued',
+        message: result.message || result.reason || 'Campaign cannot be enqueued',
         code: 'ENQUEUE_FAILED',
+        details: result.details || {},
       });
     }
 
@@ -331,6 +349,76 @@ export async function schedule(req, res, next) {
 }
 
 /**
+ * Get queue statistics (waiting, active, completed, failed counts)
+ * @route GET /campaigns/queue/stats
+ */
+export async function getQueueStats(req, res, next) {
+  try {
+    const { smsQueue } = await import('../queue/index.js');
+    const logger = (await import('../utils/logger.js')).logger;
+
+    if (!smsQueue) {
+      return res.status(503).json({
+        ok: false,
+        message: 'Queue service unavailable',
+        code: 'QUEUE_UNAVAILABLE',
+      });
+    }
+
+    // Get queue counts
+    const [waiting, active, completed, delayedJobs, failed] = await Promise.all([
+      smsQueue.getWaitingCount(),
+      smsQueue.getActiveCount(),
+      smsQueue.getCompletedCount(),
+      smsQueue.getDelayed(),
+      smsQueue.getFailedCount(),
+    ]);
+    const delayed = delayedJobs.length;
+
+    // Get recent job activity (last 100 jobs)
+    const [recentCompleted, recentFailed] = await Promise.all([
+      smsQueue.getJobs(['completed'], 0, 99),
+      smsQueue.getJobs(['failed'], 0, 99),
+    ]);
+
+    // Calculate processing rate (jobs completed in last hour)
+    const oneHourAgo = Date.now() - 60 * 60 * 1000;
+    const recentCompletedCount = recentCompleted.filter(
+      job => job.finishedOn && job.finishedOn > oneHourAgo,
+    ).length;
+
+    return sendSuccess(res, {
+      counts: {
+        waiting,
+        active,
+        completed,
+        delayed,
+        failed,
+        total: waiting + active + delayed,
+      },
+      processing: {
+        jobsPerHour: recentCompletedCount,
+        recentCompleted: recentCompleted.length,
+        recentFailed: recentFailed.length,
+      },
+      health: {
+        status: active > 0 || waiting > 0 ? 'processing' : 'idle',
+        hasFailures: failed > 0,
+      },
+    });
+  } catch (error) {
+    logger.error('Get queue stats error', {
+      error: error.message,
+      stack: error.stack,
+      requestId: req.id,
+      path: req.path,
+      method: req.method,
+    });
+    next(error);
+  }
+}
+
+/**
  * Get campaign metrics
  * @route GET /campaigns/:id/metrics
  */
@@ -344,6 +432,72 @@ export async function metrics(req, res, next) {
     return sendSuccess(res, metrics);
   } catch (error) {
     logger.error('Get campaign metrics error', {
+      error: error.message,
+      stack: error.stack,
+      storeId: getStoreId(req),
+      campaignId: req.params.id,
+      requestId: req.id,
+      path: req.path,
+      method: req.method,
+    });
+    next(error);
+  }
+}
+
+/**
+ * Get campaign progress (sent, failed, pending counts and percentage)
+ * @route GET /campaigns/:id/progress
+ */
+export async function getCampaignProgress(req, res, next) {
+  try {
+    const storeId = getStoreId(req);
+    const { id } = req.params;
+
+    const prisma = (await import('../services/prisma.js')).default;
+
+    // Verify campaign belongs to store
+    const campaign = await prisma.campaign.findFirst({
+      where: { id, shopId: storeId },
+      select: { id: true },
+    });
+
+    if (!campaign) {
+      return res.status(404).json({
+        ok: false,
+        message: 'Campaign not found',
+        code: 'NOT_FOUND',
+      });
+    }
+
+    // Get recipient counts by status
+    const [total, sent, failed, pending] = await Promise.all([
+      prisma.campaignRecipient.count({
+        where: { campaignId: id },
+      }),
+      prisma.campaignRecipient.count({
+        where: { campaignId: id, status: 'sent' },
+      }),
+      prisma.campaignRecipient.count({
+        where: { campaignId: id, status: 'failed' },
+      }),
+      prisma.campaignRecipient.count({
+        where: { campaignId: id, status: 'pending' },
+      }),
+    ]);
+
+    const processed = sent + failed;
+    const progress = total > 0 ? Math.round((processed / total) * 100) : 0;
+
+    return sendSuccess(res, {
+      total,
+      sent,
+      failed,
+      pending,
+      processed,
+      progress,
+    });
+  } catch (error) {
+    logger.error('Get campaign progress error', {
       error: error.message,
       stack: error.stack,
       storeId: getStoreId(req),
@@ -518,6 +672,55 @@ export async function stats(req, res, next) {
 }
 
 /**
+ * Cancel a campaign that is currently sending
+ * @route POST /campaigns/:id/cancel
+ */
+export async function cancel(req, res, next) {
+  try {
+    const storeId = getStoreId(req);
+    const { id } = req.params;
+
+    const result = await campaignsService.cancelCampaign(storeId, id);
+
+    if (!result.ok) {
+      if (result.reason === 'not_found') {
+        return res.status(404).json({
+          ok: false,
+          message: 'Campaign not found',
+          code: 'NOT_FOUND',
+        });
+      }
+      if (result.reason?.startsWith('invalid_status')) {
+        return res.status(409).json({
+          ok: false,
+          message: result.message || 'Campaign cannot be cancelled in its current state',
+          code: 'INVALID_STATUS',
+          reason: result.reason,
+        });
+      }
+      return res.status(400).json({
+        ok: false,
+        message: result.message || 'Campaign cannot be cancelled',
+        code: 'CANCEL_FAILED',
+      });
+    }
+
+    return sendSuccess(res, result, 'Campaign cancelled successfully');
+  } catch (error) {
+    logger.error('Cancel campaign error', {
+      error: error.message,
+      stack: error.stack,
+      storeId: getStoreId(req),
+      campaignId: req.params.id,
+      requestId: req.id,
+      path: req.path,
+      method: req.method,
+    });
+    next(error);
+  }
+}
+
+/**
  * Retry failed SMS for a campaign
  * @route POST /campaigns/:id/retry-failed
  */
@@ -582,9 +785,14 @@ export default {
   enqueue,
   sendNow,
   schedule,
+  cancel,
   metrics,
   status,
   stats,
   retryFailed,
   updateDeliveryStatus,
+  getCampaignPreview,
+  getCampaignProgress,
+  getQueueStats,
+  getFailedRecipients,
 };
