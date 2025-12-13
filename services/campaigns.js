@@ -416,6 +416,22 @@ export async function createCampaign(storeId, campaignData) {
   // Validate campaign data
   validateCampaignData(campaignData);
 
+  // Check if campaign with same name already exists for this shop
+  const trimmedName = campaignData.name.trim();
+  const existingCampaign = await prisma.campaign.findFirst({
+    where: {
+      shopId: storeId,
+      name: trimmedName,
+    },
+    select: { id: true, name: true, status: true },
+  });
+
+  if (existingCampaign) {
+    throw new ValidationError(
+      `A campaign with the name "${trimmedName}" already exists for this store. Please choose a different name.`,
+    );
+  }
+
   // Validate and parse scheduleAt date if provided
   let scheduleAtDate = null;
   if (campaignData.scheduleAt) {
@@ -439,36 +455,72 @@ export async function createCampaign(storeId, campaignData) {
   }
 
   // Use transaction to ensure both campaign and metrics are created atomically
-  const result = await prisma.$transaction(async tx => {
-    // Create campaign
-    const campaign = await tx.campaign.create({
-      data: {
-        shopId: storeId,
-        name: campaignData.name.trim(),
-        message: campaignData.message.trim(),
-        audience: campaignData.audience || 'all',
-        discountId: campaignData.discountId || null,
-        scheduleType: campaignData.scheduleType || 'immediate',
-        scheduleAt: scheduleAtDate,
-        recurringDays: campaignData.recurringDays || null,
-        status: 'draft',
-      },
+  try {
+    const result = await prisma.$transaction(async tx => {
+      // Double-check for duplicate name within transaction (race condition protection)
+      const duplicateCheck = await tx.campaign.findFirst({
+        where: {
+          shopId: storeId,
+          name: trimmedName,
+        },
+        select: { id: true },
+      });
+
+      if (duplicateCheck) {
+        throw new ValidationError(
+          `A campaign with the name "${trimmedName}" already exists for this store. Please choose a different name.`,
+        );
+      }
+
+      // Create campaign
+      const campaign = await tx.campaign.create({
+        data: {
+          shopId: storeId,
+          name: trimmedName,
+          message: campaignData.message.trim(),
+          audience: campaignData.audience || 'all',
+          discountId: campaignData.discountId || null,
+          scheduleType: campaignData.scheduleType || 'immediate',
+          scheduleAt: scheduleAtDate,
+          recurringDays: campaignData.recurringDays || null,
+          status: 'draft',
+        },
+      });
+
+      // Create metrics record
+      await tx.campaignMetrics.create({
+        data: { campaignId: campaign.id },
+      });
+
+      return campaign;
     });
 
-    // Create metrics record
-    await tx.campaignMetrics.create({
-      data: { campaignId: campaign.id },
+    logger.info('Campaign created successfully', {
+      storeId,
+      campaignId: result.id,
     });
 
-    return campaign;
-  });
+    return result;
+  } catch (error) {
+    // Handle Prisma unique constraint violation (race condition)
+    if (
+      error.code === 'P2002' &&
+      error.meta?.target?.includes('name') &&
+      error.meta?.target?.includes('shopId')
+    ) {
+      throw new ValidationError(
+        `A campaign with the name "${trimmedName}" already exists for this store. Please choose a different name.`,
+      );
+    }
 
-  logger.info('Campaign created successfully', {
-    storeId,
-    campaignId: result.id,
-  });
+    // Re-throw ValidationError as-is
+    if (error instanceof ValidationError) {
+      throw error;
+    }
 
-  return result;
+    // Re-throw other errors
+    throw error;
+  }
 }
 
 /**
