@@ -745,6 +745,9 @@ export async function prepareCampaign(storeId, campaignId) {
  * @returns {Promise<Object>} Enqueue result
  */
 export async function enqueueCampaign(storeId, campaignId) {
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/72a17531-4a03-4868-9574-6d14ee68fc32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'campaigns.js:747',message:'enqueueCampaign ENTRY',data:{storeId,campaignId,processId:process.pid,requestId:`req_${Date.now()}`},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   logger.info('Enqueuing campaign for bulk SMS', {
     storeId,
     campaignId,
@@ -823,6 +826,9 @@ export async function enqueueCampaign(storeId, campaignId) {
       // This prevents race conditions where multiple requests try to enqueue the same campaign
       const previousStatus = campaign.status; // Store for potential rollback
 
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/72a17531-4a03-4868-9574-6d14ee68fc32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'campaigns.js:814',message:'BEFORE atomic status update',data:{campaignId,currentStatus:campaign.status,previousStatus},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       const updateResult = await tx.campaign.updateMany({
         where: {
           id: campaignId,
@@ -836,6 +842,9 @@ export async function enqueueCampaign(storeId, campaignId) {
           updatedAt: new Date(),
         },
       });
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/72a17531-4a03-4868-9574-6d14ee68fc32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'campaigns.js:830',message:'AFTER atomic status update',data:{campaignId,updateCount:updateResult.count,currentStatus:campaign.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
 
       // If update count is 0, another request already updated the status
       if (updateResult.count === 0) {
@@ -1354,6 +1363,9 @@ export async function enqueueCampaign(storeId, campaignId) {
             jobRecipientIds.length === currentRecipientIds.length &&
             jobRecipientIds.every((id, idx) => id === currentRecipientIds[idx])
           ) {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/72a17531-4a03-4868-9574-6d14ee68fc32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'campaigns.js:1356',message:'DUPLICATE FOUND in checkExistingJob',data:{campaignId,jobId:job.id,jobState:job.state||'unknown',recipientCount:recipientIds.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+            // #endregion
             logger.warn(
               {
                 campaignId,
@@ -1420,13 +1432,22 @@ export async function enqueueCampaign(storeId, campaignId) {
 
       // Generate unique jobId based on recipientIds hash
       const jobId = generateJobId(campaign.id, recipientIds);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/72a17531-4a03-4868-9574-6d14ee68fc32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'campaigns.js:1422',message:'Generated jobId',data:{campaignId,batchIndex,jobId,recipientCount:recipientIds.length,first5Recipients:recipientIds.slice(0,5)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
 
       try {
         // CRITICAL: Check if job already exists using atomic getJob
         // This prevents race conditions where multiple requests try to add the same job
         const existingJob = await smsQueue.getJob(jobId);
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/72a17531-4a03-4868-9574-6d14ee68fc32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'campaigns.js:1427',message:'getJob result',data:{campaignId,jobId,existingJobFound:!!existingJob},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
         if (existingJob) {
           const jobState = await existingJob.getState();
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/72a17531-4a03-4868-9574-6d14ee68fc32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'campaigns.js:1429',message:'Existing job state',data:{campaignId,jobId,jobState},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
           if (['waiting', 'active', 'delayed', 'completed'].includes(jobState)) {
             logger.warn(
               {
@@ -1487,8 +1508,14 @@ export async function enqueueCampaign(storeId, campaignId) {
         );
         return { enqueued: true, skipped: false, recipientCount: recipientIds.length };
       } catch (err) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/72a17531-4a03-4868-9574-6d14ee68fc32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'campaigns.js:1489',message:'smsQueue.add ERROR',data:{campaignId,batchIndex,jobId,error:err.message,errorCode:err.code,isDuplicate:err.message?.includes('already exists')||err.code==='DUPLICATE_JOB'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
         // Check if error is due to duplicate jobId (BullMQ throws error for duplicate jobIds)
         if (err.message?.includes('already exists') || err.code === 'DUPLICATE_JOB') {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/72a17531-4a03-4868-9574-6d14ee68fc32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'campaigns.js:1491',message:'DUPLICATE JOB ERROR caught',data:{campaignId,batchIndex,jobId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
           logger.warn(
             {
               storeId,
@@ -1521,14 +1548,28 @@ export async function enqueueCampaign(storeId, campaignId) {
     // This prevents race conditions in the counter and ensures accurate tracking
     try {
       const results = await Promise.allSettled(enqueuePromises);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/72a17531-4a03-4868-9574-6d14ee68fc32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'campaigns.js:1526',message:'Promise.allSettled results',data:{campaignId,totalBatches:batches.length,resultsCount:results.length,fulfilled:results.filter(r=>r.status==='fulfilled').length,rejected:results.filter(r=>r.status==='rejected').length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
 
       // Calculate enqueuedJobs from results (no race condition)
       enqueuedJobs = results.reduce((total, result) => {
         if (result.status === 'fulfilled' && result.value?.enqueued) {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/72a17531-4a03-4868-9574-6d14ee68fc32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'campaigns.js:1530',message:'Batch ENQUEUED in results',data:{campaignId,recipientCount:result.value.recipientCount},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
           return total + (result.value.recipientCount || 0);
+        }
+        if (result.status === 'fulfilled' && result.value?.skipped) {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/72a17531-4a03-4868-9574-6d14ee68fc32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'campaigns.js:1533',message:'Batch SKIPPED in results',data:{campaignId,recipientCount:result.value.recipientCount},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
         }
         return total;
       }, 0);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/72a17531-4a03-4868-9574-6d14ee68fc32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'campaigns.js:1534',message:'Total enqueuedJobs calculated',data:{campaignId,enqueuedJobs,totalBatches:batches.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
 
       // Log skipped and failed batches for debugging
       const skippedBatches = results.filter(r => r.status === 'fulfilled' && r.value?.skipped).length;

@@ -25,6 +25,9 @@ import prisma from './prisma.js';
  * @returns {Promise<Object>} Result with bulkId, results array, and summary
  */
 export async function sendBulkSMSWithCredits(messages) {
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/72a17531-4a03-4868-9574-6d14ee68fc32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'smsBulk.js:27',message:'sendBulkSMSWithCredits ENTRY',data:{messageCount:messages?.length,shopId:messages[0]?.shopId,campaignId:messages[0]?.meta?.campaignId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     throw new Error('messages array is required and must not be empty');
   }
@@ -205,11 +208,20 @@ export async function sendBulkSMSWithCredits(messages) {
     { shopId, messageCount: mittoMessages.length },
     'Calling Mitto bulk API',
   );
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/72a17531-4a03-4868-9574-6d14ee68fc32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'smsBulk.js:204',message:'BEFORE Mitto API call',data:{shopId,messageCount:mittoMessages.length,campaignId:messages[0]?.meta?.campaignId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
 
   let mittoResult;
   try {
     mittoResult = await sendBulkMessages(mittoMessages);
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/72a17531-4a03-4868-9574-6d14ee68fc32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'smsBulk.js:211',message:'AFTER Mitto API call SUCCESS',data:{shopId,requestedCount:mittoMessages.length,responseCount:mittoResult?.messages?.length,bulkId:mittoResult?.bulkId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
   } catch (mittoError) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/72a17531-4a03-4868-9574-6d14ee68fc32',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'smsBulk.js:213',message:'Mitto API call ERROR',data:{shopId,messageCount:mittoMessages.length,error:mittoError.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     logger.error(
       { shopId, messageCount: mittoMessages.length, error: mittoError.message },
       'Mitto bulk API call failed',
