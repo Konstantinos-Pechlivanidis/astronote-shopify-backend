@@ -1,5 +1,6 @@
 import prisma from './prisma.js';
 import { logger } from '../utils/logger.js';
+import { CampaignStatus } from '../utils/prismaEnums.js';
 
 /**
  * Update campaign aggregates (total, sent, failed, processed) from CampaignRecipient counts
@@ -57,10 +58,15 @@ export async function updateCampaignAggregates(campaignId, shopId) {
     let campaignStatus = null;
     if (pendingCount > 0) {
       // Still has pending recipients - keep as 'sending'
-      campaignStatus = 'sending';
+      campaignStatus = CampaignStatus.sending;
     } else if (total > 0 && processed === total) {
       // All recipients have been processed (sent or failed) - Phase 2.2
-      campaignStatus = 'sent';
+      // If all failed, mark as failed, otherwise mark as sent
+      if (failed === total) {
+        campaignStatus = CampaignStatus.failed;
+      } else {
+        campaignStatus = CampaignStatus.sent;
+      }
     }
     // If total === 0, don't change status (campaign might be in draft)
 

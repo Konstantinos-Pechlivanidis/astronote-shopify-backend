@@ -357,6 +357,85 @@ export async function metrics(req, res, next) {
 }
 
 /**
+ * Get failed recipients for a campaign
+ * @route GET /campaigns/:id/failed-recipients
+ */
+export async function getFailedRecipients(req, res, next) {
+  try {
+    const storeId = getStoreId(req);
+    const { id } = req.params;
+
+    const prisma = (await import('../services/prisma.js')).default;
+
+    // Verify campaign belongs to store
+    const campaign = await prisma.campaign.findFirst({
+      where: { id, shopId: storeId },
+      select: { id: true },
+    });
+
+    if (!campaign) {
+      return res.status(404).json({
+        ok: false,
+        message: 'Campaign not found',
+        code: 'NOT_FOUND',
+      });
+    }
+
+    // Get failed recipients with contact info
+    const failedRecipients = await prisma.campaignRecipient.findMany({
+      where: {
+        campaignId: id,
+        status: 'failed',
+      },
+      include: {
+        contact: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            phoneE164: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+    });
+
+    return sendSuccess(res, {
+      campaignId: id,
+      failedCount: failedRecipients.length,
+      recipients: failedRecipients.map(r => ({
+        id: r.id,
+        phoneE164: r.phoneE164,
+        error: r.error,
+        failedAt: r.updatedAt,
+        contact: r.contact
+          ? {
+              id: r.contact.id,
+              firstName: r.contact.firstName,
+              lastName: r.contact.lastName,
+              email: r.contact.email,
+            }
+          : null,
+      })),
+    });
+  } catch (error) {
+    logger.error('Get failed recipients error', {
+      error: error.message,
+      stack: error.stack,
+      storeId: getStoreId(req),
+      campaignId: req.params.id,
+      requestId: req.id,
+      path: req.path,
+      method: req.method,
+    });
+    next(error);
+  }
+}
+
+/**
  * Get campaign status with Phase 2.2 metrics (queued, success, processed, failed)
  * @route GET /campaigns/:id/status
  */

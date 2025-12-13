@@ -1624,7 +1624,27 @@ export async function getCampaignMetrics(storeId, campaignId) {
     totalDelivered: 0,
     totalFailed: 0,
     totalClicked: 0,
+    totalProcessed: 0,
   };
+
+  // Get total recipients count
+  const totalRecipients = await prisma.campaignRecipient.count({
+    where: { campaignId },
+  });
+
+  // Calculate percentages
+  const sentPercentage =
+    totalRecipients > 0
+      ? Math.round((metrics.totalSent / totalRecipients) * 100 * 100) / 100
+      : 0;
+  const failedPercentage =
+    totalRecipients > 0
+      ? Math.round((metrics.totalFailed / totalRecipients) * 100 * 100) / 100
+      : 0;
+  const deliveredPercentage =
+    totalRecipients > 0
+      ? Math.round((metrics.totalDelivered / totalRecipients) * 100 * 100) / 100
+      : 0;
 
   // Return with both old and new field names for API compatibility
   return {
@@ -1632,6 +1652,10 @@ export async function getCampaignMetrics(storeId, campaignId) {
     sent: metrics.totalSent, // ✅ Add sent alias for test compatibility
     delivered: metrics.totalDelivered, // ✅ Add delivered alias
     failed: metrics.totalFailed, // ✅ Add failed alias
+    totalRecipients,
+    sentPercentage,
+    failedPercentage,
+    deliveredPercentage,
   };
 }
 

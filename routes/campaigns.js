@@ -89,6 +89,9 @@ r.get('/:id/metrics', campaignMetricsCache, ctrl.metrics);
 // GET /campaigns/:id/status - Get campaign status with Phase 2.2 metrics
 r.get('/:id/status', campaignMetricsCache, ctrl.status);
 
+// GET /campaigns/:id/failed-recipients - Get failed recipients for a campaign
+r.get('/:id/failed-recipients', ctrl.getFailedRecipients);
+
 // POST /campaigns/:id/retry-failed - Retry failed SMS for a campaign
 r.post('/:id/retry-failed', invalidateCampaignsCache, ctrl.retryFailed);
 
