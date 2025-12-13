@@ -2,7 +2,7 @@ import prisma from './prisma.js';
 import { sendSms } from './mitto.js';
 import { logger } from '../utils/logger.js';
 import { generateUnsubscribeUrl } from '../utils/unsubscribe.js';
-import { shortenUrl, shortenUrlsInText } from '../utils/urlShortener.js';
+import { shortenUrlsInText } from '../utils/urlShortener.js';
 
 /**
  * Trigger an automation for a specific contact
@@ -86,15 +86,15 @@ export async function triggerAutomation({
       process.env.FRONTEND_BASE_URL ||
       'https://astronote-shopify-frontend.onrender.com';
 
-    // Append unsubscribe link with shortened URL
+    // Append unsubscribe link (use full URL, not shortened)
+    // IMPORTANT: Do NOT shorten the unsubscribe URL - it would cause 404 errors
     const unsubscribeUrl = generateUnsubscribeUrl(
       contact.id,
       shopId,
       contact.phoneE164,
       frontendBaseUrl,
     );
-    const shortenedUnsubscribeUrl = await shortenUrl(unsubscribeUrl);
-    processedMessage += `\n\nUnsubscribe: ${shortenedUnsubscribeUrl}`;
+    processedMessage += `\n\nUnsubscribe: ${unsubscribeUrl}`;
 
     // Get sender information
     const senderNumber =
