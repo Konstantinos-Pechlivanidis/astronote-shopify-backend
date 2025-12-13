@@ -1156,19 +1156,20 @@ export async function enqueueCampaign(storeId, campaignId) {
   }
 
   /**
-   * Check if a job with the same recipientIds already exists (waiting, active, or delayed)
+   * Check if a job with the same recipientIds already exists (waiting, active, delayed, or recently completed)
    * This prevents duplicate enqueues even if the jobId doesn't match
    */
   async function checkExistingJob(campaignId, recipientIds) {
     try {
-      // Get all active jobs (waiting, active, delayed)
-      const [waiting, active, delayed] = await Promise.all([
+      // Get all active jobs (waiting, active, delayed) and recently completed jobs
+      const [waiting, active, delayed, completed] = await Promise.all([
         smsQueue.getWaiting(),
         smsQueue.getActive(),
         smsQueue.getDelayed(),
+        smsQueue.getCompleted(0, 100), // Check last 100 completed jobs (recently completed might still be processing)
       ]);
 
-      const allActiveJobs = [...waiting, ...active, ...delayed];
+      const allActiveJobs = [...waiting, ...active, ...delayed, ...completed];
 
       // Check if any job has the same recipientIds
       for (const job of allActiveJobs) {
@@ -1190,6 +1191,15 @@ export async function enqueueCampaign(storeId, campaignId) {
             jobRecipientIds.length === currentRecipientIds.length &&
             jobRecipientIds.every((id, idx) => id === currentRecipientIds[idx])
           ) {
+            logger.warn(
+              {
+                campaignId,
+                jobId: job.id,
+                jobState: job.state || 'unknown',
+                recipientCount: recipientIds.length,
+              },
+              'Duplicate batch job found (same recipients already enqueued or processed)',
+            );
             return true; // Duplicate job found
           }
         }
@@ -1249,6 +1259,27 @@ export async function enqueueCampaign(storeId, campaignId) {
       const jobId = generateJobId(campaign.id, recipientIds);
 
       try {
+        // CRITICAL: Check if job already exists using atomic getJob
+        // This prevents race conditions where multiple requests try to add the same job
+        const existingJob = await smsQueue.getJob(jobId);
+        if (existingJob) {
+          const jobState = await existingJob.getState();
+          if (['waiting', 'active', 'delayed', 'completed'].includes(jobState)) {
+            logger.warn(
+              {
+                storeId,
+                campaignId,
+                batchIndex,
+                jobId,
+                jobState,
+                recipientCount: recipientIds.length,
+              },
+              'Job with same jobId already exists, skipping duplicate',
+            );
+            return; // Skip this batch
+          }
+        }
+
         await smsQueue.add(
           'sendBulkSMS',
           {
@@ -1263,7 +1294,10 @@ export async function enqueueCampaign(storeId, campaignId) {
             jobId,
             attempts: 5,
             backoff: { type: 'exponential', delay: 3000 },
-            removeOnComplete: true, // Remove completed jobs to save memory
+            removeOnComplete: {
+              age: 3600, // Keep completed jobs for 1 hour to prevent duplicates
+              count: 1000, // Keep last 1000 completed jobs
+            },
             removeOnFail: false, // Keep failed jobs for debugging
           },
         );
