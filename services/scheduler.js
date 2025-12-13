@@ -140,10 +140,47 @@ export async function processScheduledCampaigns() {
 }
 
 /**
+ * Acquire distributed lock for scheduler to prevent multiple instances from running simultaneously
+ * Uses Redis to ensure only one instance can process scheduled jobs at a time
+ * @param {string} lockType - Type of lock (e.g., 'campaigns', 'status-updates', 'birthdays')
+ * @returns {Promise<boolean>} True if lock was acquired
+ */
+async function acquireSchedulerLock(lockType = 'campaigns') {
+  try {
+    const { queueRedis } = await import('../config/redis.js');
+    const lockKey = `scheduler:lock:${lockType}`;
+    const lockTTL = lockType === 'campaigns' ? 90 : 330; // campaigns: 90s, others: 330s (5.5 min)
+    const lockValue = `${process.pid}-${Date.now()}`; // Unique value per instance
+    
+    // Try to acquire lock (NX = only if not exists)
+    const acquired = await queueRedis.set(lockKey, lockValue, 'EX', lockTTL, 'NX');
+    
+    if (acquired === 'OK') {
+      logger.debug('Scheduler lock acquired', { lockType, lockValue, ttl: lockTTL });
+      return true;
+    }
+    
+    logger.debug('Scheduler lock not acquired - another instance is processing', { lockType });
+    return false;
+  } catch (error) {
+    logger.error('Failed to acquire scheduler lock', { lockType, error: error.message });
+    // On error, allow processing (fail-open to prevent deadlock)
+    return true;
+  }
+}
+
+/**
  * Start periodic processing of scheduled campaigns
  * This should be called on application startup
  */
 export function startScheduledCampaignsProcessor() {
+  // CRITICAL: Check if scheduler should run on this instance
+  // Set RUN_SCHEDULER=false in production to disable on worker instances
+  if (process.env.RUN_SCHEDULER === 'false') {
+    logger.info('Scheduled campaigns processor disabled (RUN_SCHEDULER=false)');
+    return;
+  }
+
   // Skip in test mode
   if (process.env.NODE_ENV === 'test' && process.env.SKIP_QUEUES === 'true') {
     logger.info('Skipping scheduled campaigns processor in test mode');
@@ -159,33 +196,45 @@ export function startScheduledCampaignsProcessor() {
   }, 30000); // 30 seconds
 
   function processNextBatch() {
-    try {
-      // Process scheduled campaigns
-      processScheduledCampaigns()
-        .then(result => {
-          if (result.queued > 0) {
-            logger.info('Scheduled campaigns processed', result);
-          }
-        })
-        .catch(error => {
-          logger.error('Error in scheduled campaigns processor', {
-            error: error.message,
-          });
-        });
+    // Use Redis lock to prevent multiple instances from processing simultaneously
+    acquireSchedulerLock()
+      .then(hasLock => {
+        if (!hasLock) {
+          // Another instance is processing, skip this round
+          logger.debug('Skipping scheduler run - another instance has the lock');
+          setTimeout(processNextBatch, INTERVAL_MS);
+          return;
+        }
 
-      // Schedule next check
-      setTimeout(processNextBatch, INTERVAL_MS);
-    } catch (error) {
-      logger.error('Failed to process scheduled campaigns', {
-        error: error.message,
+        // We have the lock, process scheduled campaigns
+        processScheduledCampaigns()
+          .then(result => {
+            if (result.queued > 0) {
+              logger.info('Scheduled campaigns processed', result);
+            }
+          })
+          .catch(error => {
+            logger.error('Error in scheduled campaigns processor', {
+              error: error.message,
+            });
+          })
+          .finally(() => {
+            // Schedule next check after processing completes
+            setTimeout(processNextBatch, INTERVAL_MS);
+          });
+      })
+      .catch(error => {
+        logger.error('Failed to acquire scheduler lock', {
+          error: error.message,
+        });
+        // Retry after interval even if lock acquisition failed
+        setTimeout(processNextBatch, INTERVAL_MS);
       });
-      // Retry after 1 minute if processing fails
-      setTimeout(processNextBatch, INTERVAL_MS);
-    }
   }
 
-  logger.info('Scheduled campaigns processor started', {
+  logger.info('Scheduled campaigns processor started with distributed lock', {
     interval: `${INTERVAL_MS / 1000}s`,
+    runScheduler: process.env.RUN_SCHEDULER || 'true (default)',
   });
 }
 
@@ -194,6 +243,12 @@ export function startScheduledCampaignsProcessor() {
  * This should be called on application startup
  */
 export function startPeriodicStatusUpdates() {
+  // CRITICAL: Check if scheduler should run on this instance
+  if (process.env.RUN_SCHEDULER === 'false') {
+    logger.info('Periodic status updates disabled (RUN_SCHEDULER=false)');
+    return;
+  }
+
   // Skip in test mode
   if (process.env.NODE_ENV === 'test' && process.env.SKIP_QUEUES === 'true') {
     logger.info('Skipping periodic status updates in test mode');
@@ -208,10 +263,19 @@ export function startPeriodicStatusUpdates() {
     scheduleNextUpdate();
   }, 60000); // 1 minute
 
-  function scheduleNextUpdate() {
+  async function scheduleNextUpdate() {
+    // Use Redis lock to prevent multiple instances from scheduling simultaneously
+    const hasLock = await acquireSchedulerLock('status-updates');
+    
+    if (!hasLock) {
+      logger.debug('Skipping status update - another instance has the lock');
+      setTimeout(scheduleNextUpdate, INTERVAL_MS);
+      return;
+    }
+
     try {
       // Add job to queue
-      allCampaignsStatusQueue.add(
+      await allCampaignsStatusQueue.add(
         'update-all-campaigns-status',
         {},
         {
@@ -233,7 +297,7 @@ export function startPeriodicStatusUpdates() {
     }
   }
 
-  logger.info('Periodic delivery status updates started', {
+  logger.info('Periodic delivery status updates started with distributed lock', {
     interval: `${INTERVAL_MS / 1000}s`,
   });
 }
@@ -244,6 +308,12 @@ export function startPeriodicStatusUpdates() {
  * This should be called on application startup
  */
 export function startBirthdayAutomationScheduler() {
+  // CRITICAL: Check if scheduler should run on this instance
+  if (process.env.RUN_SCHEDULER === 'false') {
+    logger.info('Birthday automation scheduler disabled (RUN_SCHEDULER=false)');
+    return;
+  }
+
   // Skip in test mode
   if (process.env.NODE_ENV === 'test' && process.env.SKIP_QUEUES === 'true') {
     logger.info('Skipping birthday automation scheduler in test mode');
@@ -258,10 +328,19 @@ export function startBirthdayAutomationScheduler() {
     return midnight.getTime() - now.getTime();
   }
 
-  function scheduleNextRun() {
+  async function scheduleNextRun() {
     const timeUntilMidnight = getTimeUntilMidnight();
 
-    setTimeout(() => {
+    setTimeout(async () => {
+      // Use Redis lock to prevent multiple instances from processing simultaneously
+      const hasLock = await acquireSchedulerLock('birthdays');
+      
+      if (!hasLock) {
+        logger.debug('Skipping birthday automation - another instance has the lock');
+        scheduleNextRun();
+        return;
+      }
+
       processDailyBirthdayAutomations()
         .then(result => {
           logger.info('Daily birthday automation check completed', {
@@ -276,10 +355,11 @@ export function startBirthdayAutomationScheduler() {
             error: error.message,
             stack: error.stack,
           });
+        })
+        .finally(() => {
+          // Schedule next run (24 hours from now)
+          scheduleNextRun();
         });
-
-      // Schedule next run (24 hours from now)
-      scheduleNextRun();
     }, timeUntilMidnight);
   }
 
