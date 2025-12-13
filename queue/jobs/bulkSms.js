@@ -178,6 +178,7 @@ export async function handleBulkSMS(job) {
       };
 
       if (res.sent && res.messageId) {
+        // Idempotency: Only update if not already sent (prevent duplicates from retries)
         updateData.mittoMessageId = res.messageId;
         updateData.bulkId = result.bulkId;
         updateData.sentAt = new Date();
@@ -185,19 +186,34 @@ export async function handleBulkSMS(job) {
         updateData.deliveryStatus = 'Queued'; // Initial status from Mitto
         updateData.error = null;
         successfulIds.push(res.internalRecipientId);
+
+        // Use updateMany with condition to prevent race conditions
+        updatePromises.push(
+          prisma.campaignRecipient.updateMany({
+            where: {
+              id: res.internalRecipientId,
+              mittoMessageId: null, // Only update if not already sent
+            },
+            data: updateData,
+          }),
+        );
       } else {
         updateData.status = 'failed';
         updateData.failedAt = new Date();
         updateData.error = res.error || res.reason || 'Send failed';
         failedIds.push(res.internalRecipientId);
-      }
 
-      updatePromises.push(
-        prisma.campaignRecipient.update({
-          where: { id: res.internalRecipientId },
-          data: updateData,
-        }),
-      );
+        // Only update if still pending (idempotency)
+        updatePromises.push(
+          prisma.campaignRecipient.updateMany({
+            where: {
+              id: res.internalRecipientId,
+              status: 'pending', // Only update pending recipients
+            },
+            data: updateData,
+          }),
+        );
+      }
     }
 
     await Promise.all(updatePromises);

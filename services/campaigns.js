@@ -903,9 +903,13 @@ export async function enqueueCampaign(storeId, campaignId) {
             recipientIds,
           },
           {
-            jobId: `batch:${campaign.id}:${Date.now()}:${batchIndex}`,
+            // Use campaignId + batchIndex for unique jobId (prevents duplicate jobs)
+            // BullMQ will reject jobs with same jobId, ensuring idempotency
+            jobId: `batch:${campaign.id}:${batchIndex}`,
             attempts: 5,
             backoff: { type: 'exponential', delay: 3000 },
+            removeOnComplete: true, // Remove completed jobs to save memory
+            removeOnFail: false, // Keep failed jobs for debugging
           },
         )
         .then(() => {

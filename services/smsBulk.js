@@ -3,19 +3,11 @@
 
 import { sendBulkMessages } from './mitto.js';
 import { getBalance, debit } from './wallet.js';
-import { generateUnsubscribeToken } from '../utils/unsubscribe.js';
-import { shortenUrlsInText, shortenUrl } from '../utils/urlShortener.js';
+import { shortenUrlsInText } from '../utils/urlShortener.js';
 import { isSubscriptionActive } from './subscription.js';
 import { checkAllLimits } from './rateLimiter.js';
 import { logger } from '../utils/logger.js';
 import prisma from './prisma.js';
-
-// Base URL for unsubscribe links (from env or default)
-const baseFrontendUrl =
-  process.env.UNSUBSCRIBE_BASE_URL ||
-  process.env.FRONTEND_URL ||
-  'https://astronote-shopify-frontend.onrender.com';
-const UNSUBSCRIBE_BASE_URL = baseFrontendUrl;
 
 /**
  * Send bulk SMS with credit enforcement
@@ -133,29 +125,10 @@ export async function sendBulkSMSWithCredits(messages) {
       }
     }
 
-    // Shorten any URLs in the message text first
-    let finalText = await shortenUrlsInText(msg.text);
-
-    // Append unsubscribe link if contactId is provided
-    if (msg.contactId) {
-      try {
-        const unsubscribeToken = generateUnsubscribeToken(
-          msg.contactId,
-          shopId,
-          msg.destination,
-        );
-        const unsubscribeUrl = `${UNSUBSCRIBE_BASE_URL}/unsubscribe/${unsubscribeToken}`;
-        // Shorten unsubscribe URL
-        const shortenedUnsubscribeUrl = await shortenUrl(unsubscribeUrl);
-        finalText += `\n\nTo unsubscribe, tap: ${shortenedUnsubscribeUrl}`;
-      } catch (tokenErr) {
-        logger.warn(
-          { shopId, contactId: msg.contactId, err: tokenErr.message },
-          'Failed to generate unsubscribe token, sending without link',
-        );
-        // Continue without unsubscribe link if token generation fails
-      }
-    }
+    // Shorten any URLs in the message text
+    // Note: Unsubscribe link is already added in queue/jobs/bulkSms.js via appendUnsubscribeLink()
+    // Do NOT add it here again to avoid duplicates
+    const finalText = await shortenUrlsInText(msg.text);
 
     const trafficAccountId = msg.trafficAccountId || TRAFFIC_ACCOUNT_ID;
     if (!trafficAccountId) {

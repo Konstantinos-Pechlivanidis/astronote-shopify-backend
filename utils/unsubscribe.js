@@ -106,7 +106,8 @@ export function verifyUnsubscribeToken(token) {
  */
 export function generateUnsubscribeUrl(contactId, shopId, phoneE164, baseUrl) {
   const token = generateUnsubscribeToken(contactId, shopId, phoneE164);
-  return `${baseUrl}/unsubscribe/${token}`;
+  // Frontend route is /shopify/unsubscribe/:token
+  return `${baseUrl}/shopify/unsubscribe/${token}`;
 }
 
 /**
