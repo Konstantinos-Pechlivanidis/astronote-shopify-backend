@@ -607,7 +607,7 @@ export async function getFailedRecipients(req, res, next) {
         },
       },
       orderBy: {
-        updatedAt: 'desc',
+        sentAt: 'desc', // Use sentAt for ordering (most recent first)
       },
     });
 
@@ -618,7 +618,7 @@ export async function getFailedRecipients(req, res, next) {
         id: r.id,
         phoneE164: r.phoneE164,
         error: r.error,
-        failedAt: r.updatedAt,
+        failedAt: r.sentAt || r.deliveredAt || null, // Use sentAt or deliveredAt as fallback
         contact: r.contact
           ? {
             id: r.contact.id,

@@ -17,8 +17,8 @@ const openApiPath = join(__dirname, '..', 'openapi', 'openapi.yaml');
 try {
   if (fs.existsSync(openApiPath)) {
     const file = fs.readFileSync(openApiPath, 'utf8');
-    const spec = yaml.parse(file);
-    r.use('/docs/api', swaggerUi.serve, swaggerUi.setup(spec));
+const spec = yaml.parse(file);
+r.use('/docs/api', swaggerUi.serve, swaggerUi.setup(spec));
     logger.info('OpenAPI documentation loaded', { path: openApiPath });
   } else {
     // If OpenAPI spec doesn't exist, provide a minimal placeholder

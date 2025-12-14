@@ -763,51 +763,51 @@ export async function enqueueCampaign(storeId, campaignId) {
     statusTransitionResult = await prisma.$transaction(async tx => {
       // Get current campaign status
       const campaign = await tx.campaign.findUnique({
-        where: { id: campaignId, shopId: storeId },
-        select: { id: true, status: true },
-      });
+    where: { id: campaignId, shopId: storeId },
+    select: { id: true, status: true },
+  });
 
       if (!campaign) {
         return { ok: false, reason: 'not_found' };
-      }
+  }
 
       // If campaign is already sending, check if there are pending recipients
       if (campaign.status === CampaignStatus.sending) {
         const pendingCount = await tx.campaignRecipient.count({
-          where: {
-            campaignId,
-            status: 'pending',
-            mittoMessageId: null,
-          },
-        });
+      where: {
+        campaignId,
+        status: 'pending',
+        mittoMessageId: null,
+      },
+    });
 
-        if (pendingCount === 0) {
-          logger.warn(
-            {
-              storeId,
-              campaignId,
+    if (pendingCount === 0) {
+      logger.warn(
+        {
+          storeId,
+          campaignId,
               status: campaign.status,
-              pendingCount,
-            },
-            'Campaign already sending with no pending recipients - duplicate enqueue attempt blocked',
-          );
-          return {
-            ok: false,
-            reason: 'already_sending_no_pending',
-          };
-        } else {
-          logger.info(
-            {
-              storeId,
-              campaignId,
+          pendingCount,
+        },
+        'Campaign already sending with no pending recipients - duplicate enqueue attempt blocked',
+      );
+      return {
+        ok: false,
+        reason: 'already_sending_no_pending',
+      };
+    } else {
+      logger.info(
+        {
+          storeId,
+          campaignId,
               status: campaign.status,
-              pendingCount,
-            },
-            'Campaign already sending but has pending recipients - will enqueue existing recipients only',
-          );
+          pendingCount,
+        },
+        'Campaign already sending but has pending recipients - will enqueue existing recipients only',
+      );
           return { ok: true, statusUnchanged: true, pendingCount };
-        }
-      }
+    }
+  }
 
       // If campaign is sent or failed, reject
       if (
@@ -816,8 +816,8 @@ export async function enqueueCampaign(storeId, campaignId) {
           CampaignStatus.scheduled,
         ].includes(campaign.status)
       ) {
-        return {
-          ok: false,
+    return {
+      ok: false,
           reason: `invalid_status:${campaign.status}`,
         };
       }
@@ -1040,7 +1040,7 @@ export async function enqueueCampaign(storeId, campaignId) {
           statusTransitionResult.previousStatus || CampaignStatus.draft,
         updatedAt: new Date(),
       },
-    });
+      });
     return {
       ok: false,
       reason: 'insufficient_credits',
@@ -1060,13 +1060,13 @@ export async function enqueueCampaign(storeId, campaignId) {
   let creditReservation;
   try {
     creditReservation = await reserveCredits(storeId, requiredCredits, {
-      campaignId,
+            campaignId,
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24h expiration
       meta: {
         campaignName: campaign.name,
         recipientCount: contacts.length,
-      },
-    });
+          },
+        });
     logger.info(
       {
         storeId,
@@ -1082,12 +1082,12 @@ export async function enqueueCampaign(storeId, campaignId) {
         storeId,
         campaignId,
         error: reservationError.message,
-      },
+            },
       'Failed to reserve credits',
     );
     // Revert campaign status
     await prisma.campaign.updateMany({
-      where: {
+            where: {
         id: campaignId,
         shopId: storeId,
         status: CampaignStatus.sending,
@@ -1096,8 +1096,8 @@ export async function enqueueCampaign(storeId, campaignId) {
         status:
           statusTransitionResult.previousStatus || CampaignStatus.draft,
         updatedAt: new Date(),
-      },
-    });
+            },
+          });
     return {
       ok: false,
       reason: 'credit_reservation_failed',
@@ -1586,13 +1586,13 @@ export async function enqueueCampaign(storeId, campaignId) {
             enqueuedJobs,
           },
           'Batch enqueue completed with some skipped/failed batches',
-        );
+      );
       }
     } catch (err) {
       logger.error(
         { storeId, campaignId, err: err.message },
         'Error waiting for batch jobs to enqueue',
-      );
+        );
     }
   } else {
     logger.warn(

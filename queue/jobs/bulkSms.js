@@ -258,7 +258,6 @@ export async function handleBulkSMS(job) {
                 status: 'sent',
                 deliveryStatus: 'Queued', // Initial status from Mitto
                 error: null,
-                updatedAt: new Date(),
               },
             });
             // #region agent log
@@ -432,7 +431,6 @@ export async function handleBulkSMS(job) {
         status: 'pending',  // Only update pending messages (idempotency)
       },
       data: {
-        failedAt: retryable ? null : new Date(),
         status: retryable ? 'pending' : 'failed',
         error: e.message,
         retryCount: { increment: 1 },  // Track retry attempts

@@ -208,16 +208,16 @@ export function startScheduledCampaignsProcessor() {
         }
 
         // We have the lock, process scheduled campaigns
-        processScheduledCampaigns()
-          .then(result => {
-            if (result.queued > 0) {
-              logger.info('Scheduled campaigns processed', result);
-            }
-          })
-          .catch(error => {
-            logger.error('Error in scheduled campaigns processor', {
-              error: error.message,
-            });
+      processScheduledCampaigns()
+        .then(result => {
+          if (result.queued > 0) {
+            logger.info('Scheduled campaigns processed', result);
+          }
+        })
+        .catch(error => {
+          logger.error('Error in scheduled campaigns processor', {
+            error: error.message,
+          });
           })
           .finally(() => {
             // Schedule next check after processing completes
@@ -229,7 +229,7 @@ export function startScheduledCampaignsProcessor() {
           error: error.message,
         });
         // Retry after interval even if lock acquisition failed
-        setTimeout(processNextBatch, INTERVAL_MS);
+      setTimeout(processNextBatch, INTERVAL_MS);
       });
   }
 
